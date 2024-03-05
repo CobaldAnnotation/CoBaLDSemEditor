@@ -1,3 +1,5 @@
+import pickle
+
 class Sentence:
     """Storage for sentence"""
     def __init__(self, idx):
@@ -87,7 +89,16 @@ class Conllu:
 class Wrapper:
     def __init__(self):
         self.conllu = Conllu()
-        self.comments = ''
+        self.comments = {}
         self.checked = {}
+        self.translations = {}
 
+    def save(self, path):
+        pickle.dump(self, open(path, 'wb'))
+
+    def load(self, path):
+        self = pickle.load(open(path, 'rb'))
+
+    def importconll(self, path):
+        self.conllu.read(path)
     

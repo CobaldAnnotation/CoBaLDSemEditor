@@ -6,7 +6,8 @@ import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import pyqtSlot
 from functools import partial
 from inside.reader import Conllu, Wrapper
-from inside.dialogues import SaveWarning
+from inside.utils import SaveWarning, RestoreWarning, StoreCommand, CustomQLineEdit
+from googletrans import Translator
 
 SEMSLOTS = pickle.load(open('inside/semslots.bin', 'rb'))
 SEMCLASS = pickle.load(open('inside/semclasses.bin', 'rb'))
@@ -20,6 +21,8 @@ SEMCLASS = set(SEMCLASS)
 WITHFEATS = '  ID  FORM                     LEMMA                    UPOS  FEATURES                                                                      HEAD  DEPREL         DEPS    '
 NOFEATS = '  ID  FORM                     LEMMA                    UPOS  HEAD  DEPREL         DEPS    '
 
+LANGS = {'Hungarian': 'hu', 'Serbian': 'sr', 'Russian': 'ru', 'English': 'en', 'Turkish': 'tr', 'Czech': 'cs'}
+
 class Window(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,6 +31,7 @@ class Window(QtWidgets.QMainWindow):
         self.data = Conllu() #Wrapper() # empty
         self.filepath = None #path to open conll
         self.sentnumber = 1 # a number for go to button
+        self.translator = Translator()
 
         self.initUI()
         self.loadsavedsettings()
@@ -54,9 +58,11 @@ class Window(QtWidgets.QMainWindow):
         self.sentencefont = QtGui.QFont(families[0], 12)
 
         # create Menu and Toolbar
+        self.undoStack = QtWidgets.QUndoStack()
         self.createActions()
         self.createMenuBar()
         self.createToolBars()
+
 
         # main widget
         wid = QtWidgets.QWidget(self)
@@ -173,6 +179,23 @@ class Window(QtWidgets.QMainWindow):
         self.sizemAction.setShortcut(QtGui.QKeySequence.ZoomOut)
         self.sizemAction.triggered.connect(self.fontsizeminus)
 
+        self.undoAction = self.undoStack.createUndoAction(self, self.tr("&Undo"))
+        self.undoAction.setShortcut(QtGui.QKeySequence.Undo)
+        self.undoAction.setIcon(QtGui.QIcon('inside/design/undo.png'))
+        self.redoAction = self.undoStack.createRedoAction(self, self.tr("&Redo"))
+        self.redoAction.setShortcut(QtGui.QKeySequence.Redo)
+        self.redoAction.setIcon(QtGui.QIcon('inside/design/redo.png'))
+
+        self.restoreAction = QtWidgets.QAction('&Reset Sentence')
+        self.restoreAction.setText('&Reset Sentence')
+        self.restoreAction.triggered.connect(self.restoresent)
+        self.restoreAction.setIcon(QtGui.QIcon('inside/design/restore.png'))
+
+        self.translAction = QtWidgets.QAction('&Make Translation')
+        self.translAction.setText('&Make Translation')
+        self.translAction.triggered.connect(self.translate)
+        self.translAction.setIcon(QtGui.QIcon('inside/design/translate.png'))
+
     def createMenuBar(self):
         """Menu Bar for File"""
         menuBar = self.menuBar()
@@ -181,10 +204,13 @@ class Window(QtWidgets.QMainWindow):
         fileMenu.addAction(self.saveAction)
         fileMenu.addAction(self.saveAsAction)
         fileMenu.addAction(self.closeAction)
+        editMenu = menuBar.addMenu('&Edit')
+        editMenu.addAction(self.undoAction)
+        editMenu.addAction(self.redoAction)
 
     def createToolBars(self):
         """Toolbar for navigation"""
-        # create widgets for toolbar
+        # create widgets for toolbars
         if not self.data.ready:
             # if file not open
             self.gotonumber = QtWidgets.QSpinBox()
@@ -199,15 +225,52 @@ class Window(QtWidgets.QMainWindow):
         self.datalength = QtWidgets.QLabel('') # number of sents in file
         self.morphcheck = QtWidgets.QCheckBox('Show morphological features')
         self.morphcheck.stateChanged.connect(self.morphload)
+        self.srclang = QtWidgets.QComboBox()
+        self.srclang.insertItems(1, list(LANGS.keys()))
+        self.transldir = QtWidgets.QLabel('Label')
+        self.transldir.setPixmap(QtGui.QPixmap("inside/design/transdir.png"))
+        self.transldir.resize(32, 32)
+        self.destlang = QtWidgets.QComboBox()
+        self.destlang.insertItems(1, list(LANGS.keys()))
 
-        # create toolbar and add widgets
+        # create toolbars and add widgets
+        UndoRedoBar = self.addToolBar("Edit")
+        UndoRedoBar.addAction(self.undoAction)
+        UndoRedoBar.addAction(self.redoAction)
+        UndoRedoBar.addAction(self.restoreAction)
+
         MoveToolBar = self.addToolBar("Navigate")
         MoveToolBar.addAction(self.prevAction)
         MoveToolBar.addAction(self.nextAction)
         MoveToolBar.addAction(self.numberloadAction)
         MoveToolBar.addWidget(self.gotonumber)
         MoveToolBar.addWidget(self.datalength)
-        MoveToolBar.addWidget(self.morphcheck)
+
+        ViewToolBar = self.addToolBar("View")
+        ViewToolBar.addWidget(self.morphcheck)
+        ViewToolBar.addWidget(self.srclang)
+        ViewToolBar.addWidget(self.transldir)
+        ViewToolBar.addWidget(self.destlang)
+        ViewToolBar.addAction(self.translAction)
+
+    def translate(self):
+        if self.translwid.toPlainText() != '':
+            return
+        try:
+            trans = self.translator.translate(self.textwid.toPlainText(), src=self.srclang.currentText(), dest=self.destlang.currentText())
+            self.translwid.setPlainText(trans.text)
+        except Exception:
+            QtWidgets.QMessageBox.about(self, 'Error', "Google Translate doesn't respond")
+            raise
+            return
+
+    def restoresent(self):
+        """Restore initial markup"""
+        if not self.data.ready:
+            return   
+        warn = RestoreWarning()
+        if warn.exec():
+            self.loadsenttogui(self.data.current)
 
     def prevsent(self):
         """Move to previous sentence"""
@@ -275,9 +338,11 @@ class Window(QtWidgets.QMainWindow):
                 tokenms = QtWidgets.QLabel(token.morphosyntax)
             tokenms.setFont(self.monospacefont)
             # add semantics
-            tokensemslot = QtWidgets.QLineEdit(token.semslot)
+            tokensemslot = CustomQLineEdit(token.semslot)
+            tokensemslot.editingFinished.connect(self.storeFieldText)
             tokensemslot.setCompleter(SEMSLOTVARS)
-            tokensemclass = QtWidgets.QLineEdit(token.semclass)
+            tokensemclass = CustomQLineEdit(token.semclass)
+            tokensemclass.editingFinished.connect(self.storeFieldText)
             tokensemclass.setCompleter(SEMCLASSVARS)
 
             tokenlayout.addWidget(tokenms)
@@ -297,9 +362,11 @@ class Window(QtWidgets.QMainWindow):
                 semslot = tokenlayout.itemAt(tokenlayout.count() - 2).widget().text()
                 semclass = tokenlayout.itemAt(tokenlayout.count() - 1).widget().text()
                 if semslot not in SEMSLOTS:
+                    tokenlayout.itemAt(tokenlayout.count() - 2).widget().setText('INCORRECT')
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic slot: {semslot}')
                     return 'INCORRECT'
                 if semclass not in SEMCLASS:
+                    tokenlayout.itemAt(tokenlayout.count() - 1).widget().setText('INCORRECT')
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic class: {semclass}')
                     return 'INCORRECT'
                 self.data.data[sentkey].tokens[i].semslot = semslot
@@ -414,11 +481,18 @@ class Window(QtWidgets.QMainWindow):
                     self.loadsenttogui(self.data.current)
                 else:
                     self.filepath = None
+            if settings.get('srclang') and settings.get('destlang'):
+                self.srclang.setCurrentText(settings['srclang'])
+                self.destlang.setCurrentText(settings['destlang'])
+
+    def storeFieldText(self):
+        command = StoreCommand(self.sender(), self.sender().text())
+        self.undoStack.push(command)
 
     def closeEvent(self, e):
         """Close app and save settings"""
         self.settings.setValue("size", self.size())
         self.settings.setValue("pos", self.pos())
-        settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 'nomorph': self.nomorph}
+        settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 'nomorph': self.nomorph, 'srclang': self.srclang.currentText(), 'destlang': self.destlang.currentText()}
         pickle.dump(settings, open('inside/settings.bin', 'wb'))
         e.accept()
