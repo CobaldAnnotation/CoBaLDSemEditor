@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 
 inside/settings.bin
+temp.ipynb

@@ -5,19 +5,29 @@ import PyQt5.QtGui as QtGui
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import pyqtSlot
 from functools import partial
-from inside.reader import Conllu
+from inside.reader import Conllu, Wrapper
 from inside.dialogues import SaveWarning
 
-SEMSLOTVARS = QtWidgets.QCompleter(pickle.load(open('inside/semslots.bin', 'rb')))
-SEMCLASSVARS = QtWidgets.QCompleter(pickle.load(open('inside/semclasses.bin', 'rb')))
+SEMSLOTS = pickle.load(open('inside/semslots.bin', 'rb'))
+SEMCLASS = pickle.load(open('inside/semclasses.bin', 'rb'))
+
+SEMSLOTVARS = QtWidgets.QCompleter(SEMSLOTS)
+SEMCLASSVARS = QtWidgets.QCompleter(SEMCLASS)
+
+SEMSLOTS = set(SEMSLOTS)
+SEMCLASS = set(SEMCLASS)
+
+WITHFEATS = '  ID  FORM                     LEMMA                    UPOS  FEATURES                                                                      HEAD  DEPREL         DEPS    '
+NOFEATS = '  ID  FORM                     LEMMA                    UPOS  HEAD  DEPREL         DEPS    '
 
 class Window(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.nomorph = True # check morphofeats
-        self.data = Conllu() # empty
+        self.data = Conllu() #Wrapper() # empty
         self.filepath = None #path to open conll
+        self.sentnumber = 1 # a number for go to button
 
         self.initUI()
         self.loadsavedsettings()
@@ -71,11 +81,26 @@ class Window(QtWidgets.QMainWindow):
         self.textwid.setReadOnly(True)
         self.textwid.setStyleSheet("color: #0a516d; border-bottom: 1px solid black;")
 
+        self.translheader = QtWidgets.QLabel('Translation')
+        self.translheader.setFont(self.sentencefont)
         self.translwid = QtWidgets.QPlainTextEdit('Translation')
         # self.translwid.setMaximumWidth(1920)
         self.translwid.setReadOnly(True)
         self.translwid.setMaximumHeight(60)
         self.translwid.setStyleSheet("color: #0a516d; border-bottom: 1px solid black;")
+
+        # create column headers
+
+        self.headercolgrid = QtWidgets.QHBoxLayout()
+        self.headercols = QtWidgets.QLabel(NOFEATS)
+        self.headercols.setFont(self.monospacefont)
+        self.headersemslot = QtWidgets.QLabel('SEMSLOT')
+        self.headersemslot.setFont(self.monospacefont)
+        self.headersemclass = QtWidgets.QLabel('SEMCLASS')
+        self.headersemclass.setFont(self.monospacefont)
+        self.headercolgrid.addWidget(self.headercols)
+        self.headercolgrid.addWidget(self.headersemslot)
+        self.headercolgrid.addWidget(self.headersemclass)
 
         # token widget with layout
         self.tokenwidget = QtWidgets.QWidget()
@@ -88,7 +113,9 @@ class Window(QtWidgets.QMainWindow):
         # compile layout with widgets
         self.grid.addWidget(self.numberwid)
         self.grid.addWidget(self.textwid)
+        self.grid.addWidget(self.translheader)
         self.grid.addWidget(self.translwid)
+        self.grid.addLayout(self.headercolgrid)
         self.grid.addWidget(self.scrollArea)
 
     def createActions(self):
@@ -131,10 +158,10 @@ class Window(QtWidgets.QMainWindow):
         self.prevAction.setIcon(QtGui.QIcon('inside/design/prev.png'))
 
         # may need to use
-        # self.numberloadAction = QtWidgets.QAction('&Go to')
-        # self.numberloadAction.setText('&Go to')
-        # self.numberloadAction.triggered.connect(self.gotosent)
-        # self.numberloadAction.setIcon(QtGui.QIcon('inside/design/goto.png'))
+        self.numberloadAction = QtWidgets.QAction('&Go to')
+        self.numberloadAction.setText('&Go to')
+        self.numberloadAction.triggered.connect(self.gotosent)
+        self.numberloadAction.setIcon(QtGui.QIcon('inside/design/goto.png'))
 
         self.sizepAction = QtWidgets.QAction('&Font size +')
         self.sizepAction.setText('&Font size +')
@@ -158,8 +185,6 @@ class Window(QtWidgets.QMainWindow):
     def createToolBars(self):
         """Toolbar for navigation"""
         # create widgets for toolbar
-        goto = QtWidgets.QLabel('Goto')
-        goto.setPixmap(QtGui.QPixmap('inside/design/goto.png'))
         if not self.data.ready:
             # if file not open
             self.gotonumber = QtWidgets.QSpinBox()
@@ -170,7 +195,7 @@ class Window(QtWidgets.QMainWindow):
             self.gotonumber.setMinimum(1)
             self.gotonumber.setMaximum(len(self.data))
         self.gotonumber.setFixedWidth(60)
-        self.gotonumber.valueChanged.connect(self.gotosent) # immediately loads sent - may change
+        self.gotonumber.valueChanged.connect(self.gotosentgetnumber) # immediately loads sent - may change
         self.datalength = QtWidgets.QLabel('') # number of sents in file
         self.morphcheck = QtWidgets.QCheckBox('Show morphological features')
         self.morphcheck.stateChanged.connect(self.morphload)
@@ -179,8 +204,7 @@ class Window(QtWidgets.QMainWindow):
         MoveToolBar = self.addToolBar("Navigate")
         MoveToolBar.addAction(self.prevAction)
         MoveToolBar.addAction(self.nextAction)
-        # MoveToolBar.addAction(self.numberloadAction)
-        MoveToolBar.addWidget(goto)
+        MoveToolBar.addAction(self.numberloadAction)
         MoveToolBar.addWidget(self.gotonumber)
         MoveToolBar.addWidget(self.datalength)
         MoveToolBar.addWidget(self.morphcheck)
@@ -190,7 +214,9 @@ class Window(QtWidgets.QMainWindow):
         if not self.data.ready:
             return
         if self.data.current != 1: # if current sent is 1, can't move back
-            self.savesent(self.data.current)
+            attempt = self.savesent(self.data.current)
+            if attempt:
+                return
             self.data.current -= 1 
             self.loadsenttogui(self.data.current)
 
@@ -199,31 +225,41 @@ class Window(QtWidgets.QMainWindow):
         if not self.data.ready:
             return
         if self.data.current < len(self.data): # if current sent is last, can't move forward
-            self.savesent(self.data.current)
+            attempt = self.savesent(self.data.current)
+            if attempt:
+                return
             self.data.current += 1
             self.loadsenttogui(self.data.current)
 
-    def gotosent(self, sentkey):
+    def gotosentgetnumber(self, sentkey):
+        self.sentnumber = sentkey
+
+    def gotosent(self):
         """Jump to sentence by number"""
         if not self.data.ready:
             return
-        if sentkey <= len(self.data): # probably useless
-            self.savesent(self.data.current)
-            self.data.current = sentkey
+        if self.sentnumber <= len(self.data): # probably useless
+            attempt = self.savesent(self.data.current)
+            if attempt:
+                return
+            self.data.current = self.sentnumber
             self.loadsenttogui(self.data.current)
 
     def morphload(self, checked):
         """Show/hide morphofeats"""
         if checked:
             self.nomorph = False 
+            self.headercols.setText(WITHFEATS)
         else:
             self.nomorph = True
+            self.headercols.setText(NOFEATS)
         if not self.data.ready: # otherwise we crash
             return
         self.loadsenttogui(self.data.current)
 
     def loadsenttogui(self, sentkey):
         """Loading sentence to interface"""
+        self.gotonumber.setValue(sentkey)
         self.numberwid.setText(f'Sentence № {sentkey}')
         self.textwid.setPlainText(self.data.data[sentkey].text)
         self.translwid.setPlainText(self.data.data[sentkey].translation)
@@ -258,8 +294,16 @@ class Window(QtWidgets.QMainWindow):
             tokenlayout = self.tokens.itemAt(i) # get current token layout, i must coincide with sentence token indexes
             try:
                 # -2 = semslot, -1 = semclass (might just write 1 and 2 respectively)
-                self.data.data[sentkey].tokens[i].semslot = tokenlayout.itemAt(tokenlayout.count() - 2).widget().text()
-                self.data.data[sentkey].tokens[i].semclass = tokenlayout.itemAt(tokenlayout.count() - 1).widget().text()
+                semslot = tokenlayout.itemAt(tokenlayout.count() - 2).widget().text()
+                semclass = tokenlayout.itemAt(tokenlayout.count() - 1).widget().text()
+                if semslot not in SEMSLOTS:
+                    QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic slot: {semslot}')
+                    return 'INCORRECT'
+                if semclass not in SEMCLASS:
+                    QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic class: {semclass}')
+                    return 'INCORRECT'
+                self.data.data[sentkey].tokens[i].semslot = semslot
+                self.data.data[sentkey].tokens[i].semclass = semclass
             except IndexError: # for testing purposes, normally shouldn't occur
                 print('Self tokens count', self.tokens.count(), 'total tokens', len(self.data.data[sentkey].tokens), i)
                 print(self.data.data[sentkey].text)
@@ -317,7 +361,9 @@ class Window(QtWidgets.QMainWindow):
         """Save existing file to hard drive - actually re-writes the whole file"""
         savewarn = SaveWarning(filename=os.path.splitext(os.path.basename(self.filepath))[0])
         if savewarn.exec():
-            self.savesent(self.data.current) # save currently open sent to Conllu data
+            attempt = self.savesent(self.data.current)
+            if attempt:
+                return # save currently open sent to Conllu data
             self.data.save(self.filepath)
             self.statusBar.showMessage('File saved', 3000)
 
@@ -325,6 +371,9 @@ class Window(QtWidgets.QMainWindow):
         """Save to new file - conllu extension only"""
         filename = QtWidgets.QFileDialog.getSaveFileName(self, "Save file", '', "CONLL-U (*.conllu)")
         if filename:
+            attempt = self.savesent(self.data.current)
+            if attempt:
+                return # save currently open sent to Conllu data
             self.data.save(filename[0])
             # change current settings to new file
             self.filepath = filename[0]

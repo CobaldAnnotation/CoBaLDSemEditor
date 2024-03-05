@@ -30,11 +30,12 @@ class Token:
 
 class Conllu:
     """Main class for handling conllu data"""
-    def __init__(self):
+    def __init__(self, translang='en'):
         self.data = {} # sents: text, translation, token list
         self.ready = False
         self.len = 0
         self.current = 1 # current open sentence
+        self.translang = translang
     
     def read(self, path):
         """Reading file"""
@@ -75,7 +76,7 @@ class Conllu:
                 if sent.text:
                     print(f"# text = {sent.text}", file=file)
                 if sent.translation:
-                    print(sent.translation, file=file)
+                    print(f'# text_{self.translang} = {sent.translation}', file=file)
                 for token in sent.tokens:
                     print('\t'.join([token.noshowmorph, token.semslot, token.semclass]), file=file)
                 print(file=file)
@@ -83,3 +84,10 @@ class Conllu:
     def __len__(self):
         return self.len
                 
+class Wrapper:
+    def __init__(self):
+        self.conllu = Conllu()
+        self.comments = ''
+        self.checked = {}
+
+    
