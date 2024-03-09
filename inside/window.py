@@ -391,11 +391,13 @@ class Window(QtWidgets.QMainWindow):
                 semslot = tokenlayout.itemAt(tokenlayout.count() - 2).widget().text()
                 semclass = tokenlayout.itemAt(tokenlayout.count() - 1).widget().text()
                 if semslot not in SEMSLOTS:
-                    tokenlayout.itemAt(tokenlayout.count() - 2).widget().setText('INCORRECT')
+                    tokenlayout.itemAt(tokenlayout.count() - 2).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 2).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic slot: {semslot}')
                     return f'!!!{semslot}'
                 if semclass not in SEMCLASS:
-                    tokenlayout.itemAt(tokenlayout.count() - 1).widget().setText('INCORRECT')
+                    tokenlayout.itemAt(tokenlayout.count() - 1).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 1).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic class: {semclass}')
                     return f'!!!{semclass}'
                 self.data.data[sentkey].tokens[i].semslot = semslot
@@ -458,6 +460,9 @@ class Window(QtWidgets.QMainWindow):
         self.statusBar.showMessage('Project loaded', 3000)
 
     def importConll(self):
+        if not self.filepath:
+            QtWidgets.QMessageBox.about(self, 'Error', 'Create project first!')
+            return
         filename = QtWidgets.QFileDialog.getOpenFileName(None, "QFileDialog.getOpenFileName()",
                                                "", "CONLL-U Files (*.conllu)")
         filepath = filename[0]
