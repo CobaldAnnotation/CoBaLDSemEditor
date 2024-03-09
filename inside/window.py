@@ -3,10 +3,8 @@ import pickle
 import PyQt5.QtWidgets as QtWidgets
 import PyQt5.QtGui as QtGui
 import PyQt5.QtCore as QtCore
-from PyQt5.QtCore import pyqtSlot
-from functools import partial
 from inside.reader import Conllu
-from inside.utils import SaveWarning, RestoreWarning, StoreCommand, CustomQLineEdit
+from inside.utils import RestoreWarning, StoreCommand, CustomQLineEdit
 from googletrans import Translator
 
 SEMSLOTS = pickle.load(open('inside/semslots.bin', 'rb'))
@@ -28,8 +26,8 @@ class Window(QtWidgets.QMainWindow):
         super().__init__(parent)
 
         self.nomorph = True # check morphofeats
-        self.data = Conllu() #Wrapper() # empty
-        self.filepath = None #path to open project
+        self.data = Conllu() # empty
+        self.filepath = None # path to open project
         self.sentnumber = 1 # a number for go to button
         self.translator = Translator()
 
@@ -63,7 +61,6 @@ class Window(QtWidgets.QMainWindow):
         self.createMenuBar()
         self.createToolBars()
 
-
         # main widget
         wid = QtWidgets.QWidget(self)
         self.setCentralWidget(wid)
@@ -82,7 +79,6 @@ class Window(QtWidgets.QMainWindow):
         self.numberwid.setFont(self.sentencefont)
 
         self.textwid = QtWidgets.QPlainTextEdit('Text')
-        # self.textwid.setMaximumWidth(1920)
         self.textwid.setMaximumHeight(60)
         self.textwid.setReadOnly(True)
         self.textwid.setStyleSheet("color: #0a516d; border-bottom: 1px solid black;")
@@ -90,13 +86,11 @@ class Window(QtWidgets.QMainWindow):
         self.translheader = QtWidgets.QLabel('Translation')
         self.translheader.setFont(self.sentencefont)
         self.translwid = QtWidgets.QPlainTextEdit('Translation')
-        # self.translwid.setMaximumWidth(1920)
         self.translwid.setReadOnly(True)
         self.translwid.setMaximumHeight(60)
         self.translwid.setStyleSheet("color: #0a516d; border-bottom: 1px solid black;")
 
         # create column headers
-
         self.headercolgrid = QtWidgets.QHBoxLayout()
         self.headercols = QtWidgets.QLabel(NOFEATS)
         self.headercols.setFont(self.monospacefont)
@@ -113,7 +107,6 @@ class Window(QtWidgets.QMainWindow):
         self.scrollArea = QtWidgets.QScrollArea(wid)
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setWidget(self.tokenwidget)
-        # self.scrollArea.setMaximumWidth(1920)
         self.tokens = QtWidgets.QVBoxLayout(self.tokenwidget)
 
         # comment window
@@ -133,8 +126,11 @@ class Window(QtWidgets.QMainWindow):
         self.grid.addWidget(self.commentArea)
 
     def createActions(self):
-        """Actions: Open, Save, Save As and Close. 
-        Font size actions are underimplemented - not sure if we need them"""
+        """
+        Actions: New project, Open project, Import conllu,
+        Export conllu, Save project, Save as, Close
+        Undo, redo, navigation, translation
+        """
         self.newAction = QtWidgets.QAction('&New Project')
         self.newAction.setText('&New Project')
         self.newAction.setShortcut(QtGui.QKeySequence.New)
@@ -187,7 +183,6 @@ class Window(QtWidgets.QMainWindow):
         self.prevAction.triggered.connect(self.prevsent)
         self.prevAction.setIcon(QtGui.QIcon('inside/design/prev.png'))
 
-        # may need to use
         self.numberloadAction = QtWidgets.QAction('&Go to')
         self.numberloadAction.setText('&Go to')
         self.numberloadAction.triggered.connect(self.gotosent)
@@ -238,8 +233,8 @@ class Window(QtWidgets.QMainWindow):
             self.gotonumber.setMinimum(1)
             self.gotonumber.setMaximum(len(self.data))
         self.gotonumber.setFixedWidth(60)
-        self.gotonumber.valueChanged.connect(self.gotosentgetnumber) # immediately loads sent - may change
-        self.datalength = QtWidgets.QLabel('') # number of sents in file
+        self.gotonumber.valueChanged.connect(self.gotosentgetnumber)
+        self.datalength = QtWidgets.QLabel() # number of sents in file
         self.morphcheck = QtWidgets.QCheckBox('Show morphological features')
         self.morphcheck.stateChanged.connect(self.morphload)
         self.srclang = QtWidgets.QComboBox()
@@ -286,7 +281,7 @@ class Window(QtWidgets.QMainWindow):
             return
     
     def setcheckedsent(self, checked):
-        "Mark sent as checked"
+        """Mark sent as checked"""
         if checked and len(self.data) > 0:
             self.data.data[self.data.current].checked = True 
         elif len(self.data) > 0:
@@ -385,6 +380,7 @@ class Window(QtWidgets.QMainWindow):
         self.tokens.update()
         self.grid.update()
         self.commentArea.setPlainText(self.data.data[sentkey].comment)
+        self.undoStack.clear() # empty undo stack
 
     def savesent(self, sentkey):
         """Save sentence to Conllu data"""
@@ -409,7 +405,6 @@ class Window(QtWidgets.QMainWindow):
                 print(self.data.data[sentkey].text)
                 raise
         self.data.data[sentkey].comment = self.commentArea.toPlainText()
-        self.undoStack.clear() # empty undo stack
 
     def clearLayout(self, layout):
         """Clear tokens from layout"""
@@ -502,10 +497,13 @@ class Window(QtWidgets.QMainWindow):
             self.statusBar.showMessage('Project saved', 3000)
 
     def exportConll(self):
+        if not self.data.ready:
+            QtWidgets.QMessageBox.about(self, 'Warning', 'No data to export!')
+            return
         filename = QtWidgets.QFileDialog.getSaveFileName(self, "Export CONLL-U", '', "CONLL-U files (*.conllu)")
-        if filename:
+        if filename[0]:
             self.data.write_conllu(filename[0])
-        self.statusBar.showMessage('CONLL-U exported', 3000)
+            self.statusBar.showMessage('CONLL-U exported', 3000)
 
     def closeFile(self):
         """Close current file and empty settings"""
