@@ -5,7 +5,7 @@ import PyQt5.QtGui as QtGui
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import pyqtSlot
 from functools import partial
-from inside.reader import Conllu, Wrapper
+from inside.reader import Conllu
 from inside.utils import SaveWarning, RestoreWarning, StoreCommand, CustomQLineEdit
 from googletrans import Translator
 
@@ -29,7 +29,7 @@ class Window(QtWidgets.QMainWindow):
 
         self.nomorph = True # check morphofeats
         self.data = Conllu() #Wrapper() # empty
-        self.filepath = None #path to open conll
+        self.filepath = None #path to open project
         self.sentnumber = 1 # a number for go to button
         self.translator = Translator()
 
@@ -116,6 +116,12 @@ class Window(QtWidgets.QMainWindow):
         # self.scrollArea.setMaximumWidth(1920)
         self.tokens = QtWidgets.QVBoxLayout(self.tokenwidget)
 
+        # comment window
+        self.commentTitle = QtWidgets.QLabel('Comments')
+        self.commentTitle.setFont(self.sentencefont)
+        self.commentArea = QtWidgets.QPlainTextEdit()
+        self.commentArea.setMaximumHeight(120)
+
         # compile layout with widgets
         self.grid.addWidget(self.numberwid)
         self.grid.addWidget(self.textwid)
@@ -123,15 +129,33 @@ class Window(QtWidgets.QMainWindow):
         self.grid.addWidget(self.translwid)
         self.grid.addLayout(self.headercolgrid)
         self.grid.addWidget(self.scrollArea)
+        self.grid.addWidget(self.commentTitle)
+        self.grid.addWidget(self.commentArea)
 
     def createActions(self):
         """Actions: Open, Save, Save As and Close. 
         Font size actions are underimplemented - not sure if we need them"""
+        self.newAction = QtWidgets.QAction('&New Project')
+        self.newAction.setText('&New Project')
+        self.newAction.setShortcut(QtGui.QKeySequence.New)
+        self.newAction.triggered.connect(self.newProject)
+        self.newAction.setIcon(QtGui.QIcon('inside/design/new.png'))
+
         self.openAction = QtWidgets.QAction('&Open')
         self.openAction.setText('&Open')
         self.openAction.setShortcut(QtGui.QKeySequence.Open)
         self.openAction.triggered.connect(self.openFile)
         self.openAction.setIcon(QtGui.QIcon('inside/design/openfile.png'))
+
+        self.importAction = QtWidgets.QAction('&Import CONLL-U')
+        self.importAction.setText('&Import CONLL-U')
+        self.importAction.triggered.connect(self.importConll)
+        self.importAction.setIcon(QtGui.QIcon('inside/design/import.png'))
+
+        self.exportAction = QtWidgets.QAction('&Export CONLL-U')
+        self.exportAction.setText('&Export CONLL-U')
+        self.exportAction.triggered.connect(self.exportConll)
+        self.exportAction.setIcon(QtGui.QIcon('inside/design/export.png'))
 
         self.saveAction = QtWidgets.QAction('&Save')
         self.saveAction.setText('&Save')
@@ -169,16 +193,6 @@ class Window(QtWidgets.QMainWindow):
         self.numberloadAction.triggered.connect(self.gotosent)
         self.numberloadAction.setIcon(QtGui.QIcon('inside/design/goto.png'))
 
-        self.sizepAction = QtWidgets.QAction('&Font size +')
-        self.sizepAction.setText('&Font size +')
-        self.sizepAction.setShortcut(QtGui.QKeySequence.ZoomIn)
-        self.sizepAction.triggered.connect(self.fontsizeplus)
-
-        self.sizemAction = QtWidgets.QAction('&Font size -')
-        self.sizemAction.setText('&Font size -')
-        self.sizemAction.setShortcut(QtGui.QKeySequence.ZoomOut)
-        self.sizemAction.triggered.connect(self.fontsizeminus)
-
         self.undoAction = self.undoStack.createUndoAction(self, self.tr("&Undo"))
         self.undoAction.setShortcut(QtGui.QKeySequence.Undo)
         self.undoAction.setIcon(QtGui.QIcon('inside/design/undo.png'))
@@ -200,7 +214,10 @@ class Window(QtWidgets.QMainWindow):
         """Menu Bar for File"""
         menuBar = self.menuBar()
         fileMenu = menuBar.addMenu('&File')
+        fileMenu.addAction(self.newAction)
         fileMenu.addAction(self.openAction)
+        fileMenu.addAction(self.importAction)
+        fileMenu.addAction(self.exportAction)
         fileMenu.addAction(self.saveAction)
         fileMenu.addAction(self.saveAsAction)
         fileMenu.addAction(self.closeAction)
@@ -232,12 +249,16 @@ class Window(QtWidgets.QMainWindow):
         self.transldir.resize(32, 32)
         self.destlang = QtWidgets.QComboBox()
         self.destlang.insertItems(1, list(LANGS.keys()))
+        self.destlang.setCurrentIndex(3)
+        self.checkedsent = QtWidgets.QCheckBox('Checked')
+        self.checkedsent.stateChanged.connect(self.setcheckedsent)
 
         # create toolbars and add widgets
         UndoRedoBar = self.addToolBar("Edit")
         UndoRedoBar.addAction(self.undoAction)
         UndoRedoBar.addAction(self.redoAction)
         UndoRedoBar.addAction(self.restoreAction)
+        UndoRedoBar.addWidget(self.checkedsent)
 
         MoveToolBar = self.addToolBar("Navigate")
         MoveToolBar.addAction(self.prevAction)
@@ -254,15 +275,22 @@ class Window(QtWidgets.QMainWindow):
         ViewToolBar.addAction(self.translAction)
 
     def translate(self):
-        if self.translwid.toPlainText() != '':
+        if self.data.hastranslations:
             return
         try:
             trans = self.translator.translate(self.textwid.toPlainText(), src=self.srclang.currentText(), dest=self.destlang.currentText())
             self.translwid.setPlainText(trans.text)
+            self.data.data[self.data.current].translation = trans.text
         except Exception:
             QtWidgets.QMessageBox.about(self, 'Error', "Google Translate doesn't respond")
-            raise
             return
+    
+    def setcheckedsent(self, checked):
+        "Mark sent as checked"
+        if checked and len(self.data) > 0:
+            self.data.data[self.data.current].checked = True 
+        elif len(self.data) > 0:
+            self.data.data[self.data.current].checked = False
 
     def restoresent(self):
         """Restore initial markup"""
@@ -323,6 +351,10 @@ class Window(QtWidgets.QMainWindow):
     def loadsenttogui(self, sentkey):
         """Loading sentence to interface"""
         self.gotonumber.setValue(sentkey)
+        if self.data.data[sentkey].checked:
+            self.checkedsent.setChecked(True)
+        else:
+            self.checkedsent.setChecked(False)
         self.numberwid.setText(f'Sentence № {sentkey}')
         self.textwid.setPlainText(self.data.data[sentkey].text)
         self.translwid.setPlainText(self.data.data[sentkey].translation)
@@ -352,6 +384,7 @@ class Window(QtWidgets.QMainWindow):
         self.tokens.addStretch() # no spacing
         self.tokens.update()
         self.grid.update()
+        self.commentArea.setPlainText(self.data.data[sentkey].comment)
 
     def savesent(self, sentkey):
         """Save sentence to Conllu data"""
@@ -364,17 +397,19 @@ class Window(QtWidgets.QMainWindow):
                 if semslot not in SEMSLOTS:
                     tokenlayout.itemAt(tokenlayout.count() - 2).widget().setText('INCORRECT')
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic slot: {semslot}')
-                    return 'INCORRECT'
+                    return f'!!!{semslot}'
                 if semclass not in SEMCLASS:
                     tokenlayout.itemAt(tokenlayout.count() - 1).widget().setText('INCORRECT')
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic class: {semclass}')
-                    return 'INCORRECT'
+                    return f'!!!{semclass}'
                 self.data.data[sentkey].tokens[i].semslot = semslot
                 self.data.data[sentkey].tokens[i].semclass = semclass
             except IndexError: # for testing purposes, normally shouldn't occur
                 print('Self tokens count', self.tokens.count(), 'total tokens', len(self.data.data[sentkey].tokens), i)
                 print(self.data.data[sentkey].text)
                 raise
+        self.data.data[sentkey].comment = self.commentArea.toPlainText()
+        self.undoStack.clear() # empty undo stack
 
     def clearLayout(self, layout):
         """Clear tokens from layout"""
@@ -391,52 +426,71 @@ class Window(QtWidgets.QMainWindow):
                     layout.removeItem(item)
                     del item # may be redundant
         
+    def newProject(self):
+        """Create new empty project"""
+        filename = QtWidgets.QFileDialog.getSaveFileName(self, "New file", '', "CoBaLD Files (*.cobald)")
+        if filename:
+            filepath = filename[0]
+            self.filepath = filepath 
+            self.data = Conllu()
+            self.sentnumber = 1
+
     def openFile(self):
         """Open file function: gets filename"""
         filename = QtWidgets.QFileDialog.getOpenFileName(None, "QFileDialog.getOpenFileName()",
-                                               "", "CONLL-U files (*.conllu);;All Files (*)")
+                                               "", "CoBaLD Files (*.cobald)")
         filepath = filename[0]
-        if filepath and filepath.endswith('conllu'): # check if we open a conllu
+        if not filepath:
+            return
+        if filepath and filepath.endswith('cobald'): # check if we open a cobald project
             self.loadFile(filepath)
         else:
             QtWidgets.QMessageBox.about(self, 'Error', 'File cannot be opened!')
 
     def loadFile(self, filepath):
-        """Load file - used in open and in loadsaved"""
-        filename = os.path.splitext(os.path.basename(filepath))[0]
-        new = Conllu() #filler
-        res = new.read(filepath) # we must try to read the file and get possible errors
-        if res == 'BAD':
-            QtWidgets.QMessageBox.about(self, 'Error', 'File unreadable! Something wrong with tokens')
-            return
-        if res == 'EMPTY':
-            QtWidgets.QMessageBox.about(self, 'Error', 'No sentences found in file! May be corrupt')
-            return
-        # if everything is okay
+        """Load project file - used in open and in loadsaved"""
+        self.data.load(filepath)
         self.filepath = filepath
+        filename = os.path.splitext(os.path.basename(filepath))[0]
         self.setWindowTitle(f"CoBaLD Editor - {filename}")
-        self.data = new
         # go to settings
-        self.gotonumber.setMinimum(1)
-        self.gotonumber.setMaximum(len(self.data))
-        self.datalength.setText(f"  of {len(self.data)}  ")
+        if self.data.ready:
+            self.gotonumber.setMinimum(1)
+            self.gotonumber.setMaximum(len(self.data))
+            self.datalength.setText(f"  of {len(self.data)}  ")
+            self.loadsenttogui(self.data.current) # show sent
 
-        self.statusBar.showMessage('File loaded', 3000)
-        self.loadsenttogui(self.data.current) # show sent
+        self.statusBar.showMessage('Project loaded', 3000)
+
+    def importConll(self):
+        filename = QtWidgets.QFileDialog.getOpenFileName(None, "QFileDialog.getOpenFileName()",
+                                               "", "CONLL-U Files (*.conllu)")
+        filepath = filename[0]
+        if not filepath:
+            return
+        if filepath and filepath.endswith('conllu'):
+            attempt = self.data.read(filepath)
+            if attempt == 'BAD':
+                QtWidgets.QMessageBox.about(self, 'Error', 'Something is wrong with the tokens!')
+            elif attempt == 'EMPTY':
+                QtWidgets.QMessageBox.about(self, 'Error', 'File seems to be empty!')
+            else:
+                self.statusBar.showMessage('CONLL-U loaded', 3000)
+                self.loadsenttogui(self.data.current)
+        else:
+            QtWidgets.QMessageBox.about(self, 'Error', 'File cannot be opened!')
 
     def saveFile(self):
-        """Save existing file to hard drive - actually re-writes the whole file"""
-        savewarn = SaveWarning(filename=os.path.splitext(os.path.basename(self.filepath))[0])
-        if savewarn.exec():
-            attempt = self.savesent(self.data.current)
-            if attempt:
-                return # save currently open sent to Conllu data
-            self.data.save(self.filepath)
-            self.statusBar.showMessage('File saved', 3000)
+        """Save existing project to hard drive"""
+        attempt = self.savesent(self.data.current)
+        if attempt:
+            return # save currently open sent to Conllu data
+        self.data.save(self.filepath)
+        self.statusBar.showMessage('Project saved', 3000)
 
     def saveNewFile(self):
         """Save to new file - conllu extension only"""
-        filename = QtWidgets.QFileDialog.getSaveFileName(self, "Save file", '', "CONLL-U (*.conllu)")
+        filename = QtWidgets.QFileDialog.getSaveFileName(self, "Save file", '', "CoBaLD Files (*.cobald)")
         if filename:
             attempt = self.savesent(self.data.current)
             if attempt:
@@ -445,7 +499,13 @@ class Window(QtWidgets.QMainWindow):
             # change current settings to new file
             self.filepath = filename[0]
             self.setWindowTitle(f"CoBaLD Editor - {os.path.splitext(os.path.basename(self.filepath))[0]}")
-            self.statusBar.showMessage('File saved', 3000)
+            self.statusBar.showMessage('Project saved', 3000)
+
+    def exportConll(self):
+        filename = QtWidgets.QFileDialog.getSaveFileName(self, "Export CONLL-U", '', "CONLL-U files (*.conllu)")
+        if filename:
+            self.data.write_conllu(filename[0])
+        self.statusBar.showMessage('CONLL-U exported', 3000)
 
     def closeFile(self):
         """Close current file and empty settings"""
@@ -456,14 +516,7 @@ class Window(QtWidgets.QMainWindow):
         self.clearLayout(self.tokens)
         self.tokens.update()
         self.filepath = None 
-
-    def fontsizeplus(self):
-        '''increase font size'''
-        self.fontsize += 1
-
-    def fontsizeminus(self):
-        '''decrease font size'''
-        self.fontsize -= 1
+        self.checkedsent.setChecked(False)
 
     def loadsavedsettings(self):
         """Load from saved settings"""
@@ -475,12 +528,8 @@ class Window(QtWidgets.QMainWindow):
                 self.morphcheck.setChecked(True)
             # try to open file
             if settings['lastfile'] and os.path.exists(settings['lastfile']):
-                self.loadFile(settings['lastfile'])
                 self.data.current = settings['lastcurrent']
-                if self.data:
-                    self.loadsenttogui(self.data.current)
-                else:
-                    self.filepath = None
+                self.loadFile(settings['lastfile'])
             if settings.get('srclang') and settings.get('destlang'):
                 self.srclang.setCurrentText(settings['srclang'])
                 self.destlang.setCurrentText(settings['destlang'])
@@ -491,6 +540,7 @@ class Window(QtWidgets.QMainWindow):
 
     def closeEvent(self, e):
         """Close app and save settings"""
+        self.data.save(self.filepath)
         self.settings.setValue("size", self.size())
         self.settings.setValue("pos", self.pos())
         settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 'nomorph': self.nomorph, 'srclang': self.srclang.currentText(), 'destlang': self.destlang.currentText()}

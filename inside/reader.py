@@ -6,6 +6,8 @@ class Sentence:
         self.idx = idx
         self.text = None 
         self.translation = None 
+        self.checked = False 
+        self.comment = ''
         self.tokens = []
 
 class FailedToken(Exception):
@@ -38,6 +40,7 @@ class Conllu:
         self.len = 0
         self.current = 1 # current open sentence
         self.translang = translang
+        self.hastranslations = False
     
     def read(self, path):
         """Reading file"""
@@ -58,6 +61,7 @@ class Conllu:
                     if len(trans) == 2:
                         trans = trans[1]
                     elif len(trans) > 2:
+                        self.hastranslations = True
                         trans = ' = '.join(trans[1])
                     self.data[key].translation = trans
                 if line[0].isdigit():
@@ -70,35 +74,29 @@ class Conllu:
         else:
             return 'EMPTY'
     
-    def save(self, path):
+    def write_conllu(self, path):
         with open(path, 'w', encoding='utf8') as file:
             print('# global.columns =  ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC SEMSLOT SEMCLASS', file=file)
             for key, sent in self.data.items():
                 print(sent.idx, file=file)
                 if sent.text:
                     print(f"# text = {sent.text}", file=file)
-                if sent.translation:
+                if sent.translation and self.hastranslations:
                     print(f'# text_{self.translang} = {sent.translation}', file=file)
                 for token in sent.tokens:
                     print('\t'.join([token.noshowmorph, token.semslot, token.semclass]), file=file)
                 print(file=file)
 
-    def __len__(self):
-        return self.len
-                
-class Wrapper:
-    def __init__(self):
-        self.conllu = Conllu()
-        self.comments = {}
-        self.checked = {}
-        self.translations = {}
-
     def save(self, path):
-        pickle.dump(self, open(path, 'wb'))
+        if path:
+            pickle.dump((self.data, self.hastranslations, self.translang), open(path, 'wb'))
 
     def load(self, path):
-        self = pickle.load(open(path, 'rb'))
+        self.data, self.hastranslations, self.translang = pickle.load(open(path, 'rb'))
+        if len(self.data) > 0:
+            self.ready = True
+            self.len = len(self.data)
 
-    def importconll(self, path):
-        self.conllu.read(path)
+    def __len__(self):
+        return self.len
     
