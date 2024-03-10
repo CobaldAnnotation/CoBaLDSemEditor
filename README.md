@@ -4,7 +4,7 @@
 
 This is an annotation tool for [CoBaLD Annotation Project](https://github.com/CobaldAnnotation). Currently it allows one to annotate semantic part of the standard only, but future versions may include the ability to annotate morphosyntax as well. 
 
-<img src="https://github.com/fortvivlan/CoBaLDSemEditor/blob/main/img/main.jpg"  width="800">
+<img src="https://github.com/fortvivlan/CoBaLDSemEditor/blob/main/img/01.JPG"  width="800">
 
 #### Features
 
