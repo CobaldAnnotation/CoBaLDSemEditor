@@ -1,0 +1,2 @@
+pyqt5
+googletrans==3.1.0a0
