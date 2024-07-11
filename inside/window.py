@@ -24,10 +24,6 @@ POSCOMPL = QtWidgets.QCompleter(POSLIST)
 SEMSLOTS = set(SEMSLOTS)
 SEMCLASS = set(SEMCLASS)
 
-# Stupid lazy me
-WITHFEATS = '  ID  FORM               LEMMA                   UPOS  FEATURES                                                      HEAD DEPREL       DEPS           '
-NOFEATS = '  ID  FORM               LEMMA                   UPOS  HEAD DEPREL      DEPS            '
-
 # Can add new languages for translation support
 LANGS = {'Hungarian': 'hu', 'Serbian': 'sr', 'Russian': 'ru', 'English': 'en', 'Turkish': 'tr', 'Czech': 'cs', 'Bulgarian': 'bg'}
 

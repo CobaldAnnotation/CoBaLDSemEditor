@@ -28,21 +28,6 @@ class Token:
     def __str__(self):
         return '\t'.join([self.idx, self.form, self.lemma, self.upos, self.xpos, self.feats, self.head, self.deprel, self.deps, self.misc, self.semslot, self.semclass]) + '\n'
 
-# class Token:
-#     """Storage for token"""
-#     def __init__(self, line):
-#         tok = line.strip().split('\t')
-#         if len(tok) != 12:
-#             raise FailedToken(len(tok))
-#         # used to write conllu
-#         self.noshowmorph = '\t'.join(tok[:10])
-#         # for showing without feats
-#         self.nomorphosyntax = f"{tok[0]:>3}. {tok[1]:<25}{tok[2]:<25}{tok[3]:<6}{tok[6]:<4}{tok[7]:<15}{tok[8]:<10}"
-#         # for showing with feats
-#         self.morphosyntax = f"{tok[0]:>3}. {tok[1]:<25}{tok[2]:<25}{tok[3]:<6}{tok[5]:<80}{tok[6]:<4}{tok[7]:<15}{tok[8]:<10}"#'    '.join(tok[:10])
-#         self.semslot = tok[10]
-#         self.semclass = tok[11]
-
 class Conllu:
     """Main class for handling conllu data"""
     def __init__(self, translang='en'):
