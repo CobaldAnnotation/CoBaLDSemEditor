@@ -66,8 +66,10 @@ class Window(QtWidgets.QMainWindow):
         fontId = QtGui.QFontDatabase.addApplicationFont("inside/design/A_STB.ttf")
         if fontId < 0:
             print('font not loaded')
-        families = QtGui.QFontDatabase.applicationFontFamilies(fontId)
-        self.sentencefont = QtGui.QFont(families[0], 12)
+            self.sentencefont = None 
+        else:
+            families = QtGui.QFontDatabase.applicationFontFamilies(fontId)
+            self.sentencefont = QtGui.QFont(families[0], 12)
 
         # create Menu and Toolbar
         self.undoStack = QtWidgets.QUndoStack()
@@ -90,7 +92,8 @@ class Window(QtWidgets.QMainWindow):
 
         # Widgets to main layout
         self.numberwid = QtWidgets.QLabel('Sentence №')
-        self.numberwid.setFont(self.sentencefont)
+        if self.sentencefont:
+            self.numberwid.setFont(self.sentencefont)
 
         self.textwid = QtWidgets.QPlainTextEdit('Text')
         self.textwid.setMaximumHeight(60)
@@ -98,7 +101,8 @@ class Window(QtWidgets.QMainWindow):
         self.textwid.setStyleSheet("color: #0a516d; border-bottom: 1px solid black;")
 
         self.translheader = QtWidgets.QLabel('Translation')
-        self.translheader.setFont(self.sentencefont)
+        if self.sentencefont:
+            self.translheader.setFont(self.sentencefont)
         self.translwid = QtWidgets.QPlainTextEdit('Translation')
         self.translwid.setReadOnly(True)
         self.translwid.setMaximumHeight(60)
@@ -106,15 +110,7 @@ class Window(QtWidgets.QMainWindow):
 
         # create column headers
         self.headercolgrid = QtWidgets.QHBoxLayout()
-        self.headercols = QtWidgets.QLabel(NOFEATS)
-        self.headercols.setFont(self.monospacefont)
-        self.headersemslot = QtWidgets.QLabel('SEMSLOT')
-        self.headersemslot.setFont(self.monospacefont)
-        self.headersemclass = QtWidgets.QLabel('SEMCLASS')
-        self.headersemclass.setFont(self.monospacefont)
-        self.headercolgrid.addWidget(self.headercols)
-        self.headercolgrid.addWidget(self.headersemslot)
-        self.headercolgrid.addWidget(self.headersemclass)
+        self.createcolumnheaders()
 
         # token widget with layout
         self.tokenwidget = QtWidgets.QWidget()
@@ -125,7 +121,8 @@ class Window(QtWidgets.QMainWindow):
 
         # comment window
         self.commentTitle = QtWidgets.QLabel('Comments')
-        self.commentTitle.setFont(self.sentencefont)
+        if self.sentencefont:
+            self.commentTitle.setFont(self.sentencefont)
         self.commentArea = QtWidgets.QPlainTextEdit()
         self.commentArea.setMaximumHeight(120)
 
@@ -138,6 +135,37 @@ class Window(QtWidgets.QMainWindow):
         self.grid.addWidget(self.scrollArea)
         self.grid.addWidget(self.commentTitle)
         self.grid.addWidget(self.commentArea)
+
+    def createcolumnheaders(self):
+        # create column headers
+        self.idxform = QtWidgets.QLabel("  ID\tFORM")
+        self.idxform.setFixedWidth(300)
+        self.lemmaheader = QtWidgets.QLabel("LEMMA")
+        self.lemmaheader.setFixedWidth(300)
+        self.uposheader = QtWidgets.QLabel("UPOS")
+        self.uposheader.setFixedWidth(75)
+        if not self.nomorph:
+            self.featsheader = QtWidgets.QLabel("FEATS")
+        self.headheader = QtWidgets.QLabel("HEAD")
+        self.headheader.setFixedWidth(50)
+        self.deprelheader = QtWidgets.QLabel("DEPREL")
+        self.deprelheader.setFixedWidth(150)
+        self.depsheader = QtWidgets.QLabel("DEPS")
+        self.depsheader.setFixedWidth(200)
+        self.headersemslot = QtWidgets.QLabel('SEMSLOT')
+        self.headersemslot.setFont(self.monospacefont)
+        self.headersemclass = QtWidgets.QLabel('SEMCLASS')
+        self.headersemclass.setFont(self.monospacefont)
+        self.headercolgrid.addWidget(self.idxform)
+        self.headercolgrid.addWidget(self.lemmaheader)
+        self.headercolgrid.addWidget(self.uposheader)
+        if not self.nomorph:
+            self.headercolgrid.addWidget(self.featsheader)
+        self.headercolgrid.addWidget(self.headheader)
+        self.headercolgrid.addWidget(self.deprelheader)
+        self.headercolgrid.addWidget(self.depsheader)
+        self.headercolgrid.addWidget(self.headersemslot)
+        self.headercolgrid.addWidget(self.headersemclass)
 
     def createActions(self):
         """
@@ -517,10 +545,16 @@ class Window(QtWidgets.QMainWindow):
             self.onload = False
         if checked:
             self.nomorph = False 
-            self.headercols.setText(WITHFEATS)
+            for i in reversed(range(self.headercolgrid.count())): 
+                self.headercolgrid.itemAt(i).widget().setParent(None)
+            self.createcolumnheaders()
+            # self.headercols.setText(WITHFEATS)
         else:
             self.nomorph = True
-            self.headercols.setText(NOFEATS)
+            for i in reversed(range(self.headercolgrid.count())): 
+                self.headercolgrid.itemAt(i).widget().setParent(None)
+            self.createcolumnheaders()
+            # self.headercols.setText(NOFEATS)
         if not self.data.ready: # otherwise we crash
             return
         self.loadsenttogui(self.data.current)
@@ -555,7 +589,7 @@ class Window(QtWidgets.QMainWindow):
             tokenpos.setCompleter(POSCOMPL)
             tokenpos.editingFinished.connect(self.storeFieldText)
             tokenfeats = CustomQLineEdit(token.feats)
-            tokenfeats.setFixedWidth(800)
+            # tokenfeats.setFixedWidth(800)
             tokenfeats.editingFinished.connect(self.storeFieldText)
             tokenhead = CustomQLineEdit(token.head)
             tokenhead.setFixedWidth(50)
