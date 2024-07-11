@@ -161,3 +161,6 @@ cython_debug/
 
 inside/settings.bin
 temp.ipynb
+unittests.ipynb
+g.txt 
+pos.txt

@@ -1,37 +1,51 @@
 import os
+import re
 import pickle
 import PyQt5.QtWidgets as QtWidgets
 import PyQt5.QtGui as QtGui
 import PyQt5.QtCore as QtCore
-from inside.reader import Conllu
-from inside.utils import RestoreWarning, StoreCommand, CustomQLineEdit
+from PyQt5.QtCore import pyqtSlot
+from inside.reader import Conllu, Token
+from inside.utils import RestoreWarning, StoreCommand, CustomQLineEdit, CorrectFieldWarning, AddRemoveTokenWindow, DeleteWarning
 from googletrans import Translator
 
+# Things for checking and auto-completion of fields
 SEMSLOTS = pickle.load(open('inside/semslots.bin', 'rb'))
 SEMCLASS = pickle.load(open('inside/semclasses.bin', 'rb'))
+DEPRELS = pickle.load(open('inside/deprel.bin', 'rb'))
+FEATS = pickle.load(open('inside/feats.bin', 'rb'))
+POSLIST = pickle.load(open('inside/upos.bin', 'rb'))
 
 SEMSLOTVARS = QtWidgets.QCompleter(SEMSLOTS)
 SEMCLASSVARS = QtWidgets.QCompleter(SEMCLASS)
+DEPRELCOMPL = QtWidgets.QCompleter(DEPRELS)
+POSCOMPL = QtWidgets.QCompleter(POSLIST)
 
 SEMSLOTS = set(SEMSLOTS)
 SEMCLASS = set(SEMCLASS)
 
-WITHFEATS = '  ID  FORM                     LEMMA                    UPOS  FEATURES                                                                      HEAD  DEPREL         DEPS    '
-NOFEATS = '  ID  FORM                     LEMMA                    UPOS  HEAD  DEPREL         DEPS    '
+# Stupid lazy me
+WITHFEATS = '  ID  FORM               LEMMA                   UPOS  FEATURES                                                      HEAD DEPREL       DEPS           '
+NOFEATS = '  ID  FORM               LEMMA                   UPOS  HEAD DEPREL      DEPS            '
 
-LANGS = {'Hungarian': 'hu', 'Serbian': 'sr', 'Russian': 'ru', 'English': 'en', 'Turkish': 'tr', 'Czech': 'cs'}
+# Can add new languages for translation support
+LANGS = {'Hungarian': 'hu', 'Serbian': 'sr', 'Russian': 'ru', 'English': 'en', 'Turkish': 'tr', 'Czech': 'cs', 'Bulgarian': 'bg'}
 
 class Window(QtWidgets.QMainWindow):
+    """
+    Main window class
+    """
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.nomorph = True # check morphofeats
-        self.data = Conllu() # empty
+        self.nomorph = True # check morphofeats - if True, show them in GUI
+        self.data = Conllu() # must create an empty conllu instance, will be replaced later
         self.filepath = None # path to open project
         self.sentnumber = 1 # a number for go to button
         self.translator = Translator()
 
         self.initUI()
+        self.onload = True # some костыль
         self.loadsavedsettings()
 
     def initUI(self):
@@ -42,7 +56,7 @@ class Window(QtWidgets.QMainWindow):
         self.move(self.settings.value("pos", QtCore.QPoint(100, 100))) 
         self.setWindowTitle("CoBaLD Editor")
 
-        # font load
+        # font load - can cause troubles on Ubuntu
         fontId = QtGui.QFontDatabase.addApplicationFont("inside/design/cour.ttf")
         if fontId < 0:
             print('font not loaded')
@@ -177,6 +191,11 @@ class Window(QtWidgets.QMainWindow):
         self.nextAction.triggered.connect(self.nextsent)
         self.nextAction.setIcon(QtGui.QIcon('inside/design/next.png'))
 
+        self.nextuncheckedAction = QtWidgets.QAction('&First unchecked')
+        self.nextuncheckedAction.setText('&First Unchecked')
+        self.nextuncheckedAction.triggered.connect(self.nextuncheckedsent)
+        self.nextuncheckedAction.setIcon(QtGui.QIcon('inside/design/nextunch.png'))
+
         self.prevAction = QtWidgets.QAction('&Previous')
         self.prevAction.setText('&Previous')
         self.prevAction.setShortcut(QtGui.QKeySequence('Shift+Backspace'))
@@ -204,6 +223,14 @@ class Window(QtWidgets.QMainWindow):
         self.translAction.setText('&Make Translation')
         self.translAction.triggered.connect(self.translate)
         self.translAction.setIcon(QtGui.QIcon('inside/design/translate.png'))
+
+        self.addtoken = QtWidgets.QAction('&Add token at...')
+        self.addtoken.setText('&Add token at...')
+        self.addtoken.triggered.connect(self.addtokenat)
+
+        self.removetoken = QtWidgets.QAction('&Remove token...')
+        self.removetoken.setText('&Remove token...')
+        self.removetoken.triggered.connect(self.deltoken)
 
     def createMenuBar(self):
         """Menu Bar for File"""
@@ -234,6 +261,7 @@ class Window(QtWidgets.QMainWindow):
             self.gotonumber.setMaximum(len(self.data))
         self.gotonumber.setFixedWidth(60)
         self.gotonumber.valueChanged.connect(self.gotosentgetnumber)
+        self.gotonumber.editingFinished.connect(self.gotoOnEnter)
         self.datalength = QtWidgets.QLabel() # number of sents in file
         self.morphcheck = QtWidgets.QCheckBox('Show morphological features')
         self.morphcheck.stateChanged.connect(self.morphload)
@@ -258,6 +286,7 @@ class Window(QtWidgets.QMainWindow):
         MoveToolBar = self.addToolBar("Navigate")
         MoveToolBar.addAction(self.prevAction)
         MoveToolBar.addAction(self.nextAction)
+        MoveToolBar.addAction(self.nextuncheckedAction)
         MoveToolBar.addAction(self.numberloadAction)
         MoveToolBar.addWidget(self.gotonumber)
         MoveToolBar.addWidget(self.datalength)
@@ -270,7 +299,8 @@ class Window(QtWidgets.QMainWindow):
         ViewToolBar.addAction(self.translAction)
 
     def translate(self):
-        if self.data.hastranslations:
+        """Get google translations"""
+        if self.data.hastranslations: # not to overwrite existing translations in original conllu
             return
         try:
             trans = self.translator.translate(self.textwid.toPlainText(), src=self.srclang.currentText(), dest=self.destlang.currentText())
@@ -280,6 +310,134 @@ class Window(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.about(self, 'Error', "Google Translate doesn't respond")
             return
     
+    def addtokenat(self):
+        """Get index to add a token at it"""
+        self.tokenindexwindow = AddRemoveTokenWindow()
+        self.tokenindexwindow.show()
+        # received index, adding
+        self.tokenindexwindow.choice.connect(self.receive_index_foradd)
+
+    def deltoken(self):
+        """
+        Get index to remove a token with that index: 
+        if there are two tokens with the same index, 
+        the first one will be deleted
+        """
+        self.tokenindexwindow = AddRemoveTokenWindow()
+        self.tokenindexwindow.show()
+        self.tokenindexwindow.choice.connect(self.receive_index_fordel) 
+
+    @pyqtSlot(str)
+    def receive_index_fordel(self, choice):
+        """Delete token with chosen index"""
+        if not ('.' in choice or choice.isdigit()):
+            # We check what was entered - only 1.1 or 1 types allowed
+            QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect index: {choice}')
+            return
+        # we find the needed token - iterating because idxs don't necessarily coincide with python list indexes
+        # we need i index in order to re-numerate the rest of the tokens later
+        for i, token in enumerate(self.data.data[self.data.current].tokens):
+            if token.idx == choice:
+                # if we try to delete a normal token with no . in index 
+                # then maybe it's not what we want
+                if '.' not in choice and token.form != '#NULL':
+                    msg = DeleteWarning()
+                    if not msg.exec():
+                        return
+                # otherwise delete
+                del self.data.data[self.data.current].tokens[i]
+                # if it's not 1.1 type token, then we have to re-numerate indexes and heads 
+                if choice.isdigit():
+                    # i - 1 states that we don't need to re-numerate anything before our deleted token
+                    # -1 means step direction
+                    self.renumerate(i - 1, -1)
+                break
+        self.loadsenttogui(self.data.current)
+
+    @pyqtSlot(str)
+    def receive_index_foradd(self, choice):
+        """
+        Add new token at a chosen index
+        """
+        if not ('.' in choice or choice.isdigit()):
+            # We check what was entered - only 1.1 or 1 types allowed
+            QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect index: {choice}')
+            return
+        # create new empty token, we only fill index and form as they can't be corrected
+        # we presume that one would only create a #NULL token
+        # although there is an option to create a token with int-index... oops
+        newtoken = Token('\t'.join('_' * 12))
+        newtoken.idx = choice
+        newtoken.form = '#NULL'
+        choice = float(choice)
+        hyphen = False # a костыль for cases when we try to add a token right before \d-\d type
+        for i, token in enumerate(self.data.data[self.data.current].tokens):
+            if '-' in token.idx: 
+                continue
+            if float(token.idx) > choice:
+                # if we add a \d.\d type token - position should be after \d token
+                if i > 0 and round(choice) != choice:
+                    self.data.data[self.data.current].tokens.insert(i, newtoken)
+                # if we add an int-indexed token - position should be before idx token
+                elif i > 0 and round(choice) == choice:
+                    if '-' in self.data.data[self.data.current].tokens[i - 1].idx:
+                        self.data.data[self.data.current].tokens.insert(i - 2, newtoken)
+                        hyphen = True
+                    else:
+                        self.data.data[self.data.current].tokens.insert(i - 1, newtoken)
+                else:
+                    # probably wouldn't happen, but in case if we want to add a 0.1 token
+                    self.data.data[self.data.current].tokens = [newtoken] + self.data.data[self.data.current].tokens
+                break
+        # if we add an int-indexed token, we have to re-numerate damn everything
+        if round(choice) == choice:
+            if hyphen:
+                self.renumerate(i - 2, 1)
+            else:
+                self.renumerate(i - 1, 1)
+        self.loadsenttogui(self.data.current)
+
+    def renumerate(self, i, step):
+        """
+        Re-numerate method: re-numerates indexes and calls a method to re-numerate heads
+        """
+        # we choose if we deleted or added: the direction should change accordingly in order to re-numerate correctly
+        if step < 0:
+            r = range(i + 1, len(self.data.data[self.data.current].tokens))
+        else:
+            r = range(len(self.data.data[self.data.current].tokens) - 1, i, -1)
+        for j in r:
+            # just for shortening reasons
+            token = self.data.data[self.data.current].tokens[j]
+            # if we have a \d.\d token
+            if '.' in token.idx:
+                old = token.idx
+                token.idx = str(float(token.idx) + step)
+                self.renumerateheads(old, token.idx)
+            # if we have a \d-\d token
+            elif '-' in token.idx:
+                left, right = token.idx.split('-')
+                left = int(left) + step
+                right = int(right) + step
+                token.idx = f"{left}-{right}"
+            # if we have a normal int-indexed token
+            else:
+                old = token.idx
+                token.idx = str(int(token.idx) + step)
+                self.renumerateheads(old, token.idx)
+
+    def renumerateheads(self, idx, newidx):
+        """
+        Method to re-numerate heads both in head and deps columns
+        """
+        for token in self.data.data[self.data.current].tokens:
+            if token.head == idx:
+                token.head = newidx 
+            if idx in re.findall('(\d+|\d+\.\d+):', token.deps):
+                # a possible break for cases like idx == 1, we may replace 11:
+                # but probably won't happen
+                token.deps = token.deps.replace(f"{idx}:", f"{newidx}:")
+
     def setcheckedsent(self, checked):
         """Mark sent as checked"""
         if checked and len(self.data) > 0:
@@ -317,8 +475,28 @@ class Window(QtWidgets.QMainWindow):
             self.data.current += 1
             self.loadsenttogui(self.data.current)
 
+    def nextuncheckedsent(self):
+        """Move to the first unchecked sent by searching through data"""
+        if not self.data.ready:
+            return
+        for key, sent in self.data.data.items():
+            if not sent.checked:
+                attempt = self.savesent(self.data.current)
+                if attempt:
+                    return
+                self.data.current = key 
+                break
+        self.loadsenttogui(self.data.current)
+
     def gotosentgetnumber(self, sentkey):
+        """Just to get sentnumber from qspinbox"""
         self.sentnumber = sentkey
+
+    @pyqtSlot()
+    def gotoOnEnter(self):
+        """Works on enter, sends us to the sentence with the number in the qspinbox"""
+        print(self.gotonumber.value())
+        self.gotosent()
 
     def gotosent(self):
         """Jump to sentence by number"""
@@ -333,6 +511,10 @@ class Window(QtWidgets.QMainWindow):
 
     def morphload(self, checked):
         """Show/hide morphofeats"""
+        if not self.onload:
+            self.savesent(self.data.current)
+        else:
+            self.onload = False
         if checked:
             self.nomorph = False 
             self.headercols.setText(WITHFEATS)
@@ -345,7 +527,7 @@ class Window(QtWidgets.QMainWindow):
 
     def loadsenttogui(self, sentkey):
         """Loading sentence to interface"""
-        self.gotonumber.setValue(sentkey)
+        self.gotonumber.setValue(sentkey) # update qspinbox
         if self.data.data[sentkey].checked:
             self.checkedsent.setChecked(True)
         else:
@@ -358,12 +540,33 @@ class Window(QtWidgets.QMainWindow):
         # filling self.tokens with new token widgets
         for token in self.data.data[sentkey].tokens:
             tokenlayout = QtWidgets.QHBoxLayout() # a horisontal layout for a token
-            # add morphosyntax
-            if self.nomorph:
-                tokenms = QtWidgets.QLabel(token.nomorphosyntax)
-            else:
-                tokenms = QtWidgets.QLabel(token.morphosyntax)
-            tokenms.setFont(self.monospacefont)
+            # morphosyntax widgets
+            tokeninfo = QtWidgets.QLabel(f"{token.idx}\t{token.form}")
+            # add context menu to add\remove tokens
+            tokeninfo.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+            tokeninfo.addAction(self.addtoken)
+            tokeninfo.addAction(self.removetoken)
+            tokeninfo.setFixedWidth(300)
+            tokenlemma = CustomQLineEdit(token.lemma)
+            tokenlemma.setFixedWidth(300)
+            tokenlemma.editingFinished.connect(self.storeFieldText)
+            tokenpos = CustomQLineEdit(token.upos)
+            tokenpos.setFixedWidth(75)
+            tokenpos.setCompleter(POSCOMPL)
+            tokenpos.editingFinished.connect(self.storeFieldText)
+            tokenfeats = CustomQLineEdit(token.feats)
+            tokenfeats.setFixedWidth(800)
+            tokenfeats.editingFinished.connect(self.storeFieldText)
+            tokenhead = CustomQLineEdit(token.head)
+            tokenhead.setFixedWidth(50)
+            tokenhead.editingFinished.connect(self.storeFieldText)
+            tokendeprel = CustomQLineEdit(token.deprel)
+            tokendeprel.setFixedWidth(150)
+            tokendeprel.setCompleter(DEPRELCOMPL)
+            tokendeprel.editingFinished.connect(self.storeFieldText)
+            tokendeps = CustomQLineEdit(token.deps)
+            tokendeps.setFixedWidth(200)
+            tokendeps.editingFinished.connect(self.storeFieldText)
             # add semantics
             tokensemslot = CustomQLineEdit(token.semslot)
             tokensemslot.editingFinished.connect(self.storeFieldText)
@@ -372,7 +575,15 @@ class Window(QtWidgets.QMainWindow):
             tokensemclass.editingFinished.connect(self.storeFieldText)
             tokensemclass.setCompleter(SEMCLASSVARS)
 
-            tokenlayout.addWidget(tokenms)
+            # tokenlayout.addWidget(tokenms)
+            tokenlayout.addWidget(tokeninfo)
+            tokenlayout.addWidget(tokenlemma)
+            tokenlayout.addWidget(tokenpos)
+            if not self.nomorph:
+                tokenlayout.addWidget(tokenfeats)
+            tokenlayout.addWidget(tokenhead)
+            tokenlayout.addWidget(tokendeprel)
+            tokenlayout.addWidget(tokendeps)
             tokenlayout.addWidget(tokensemslot)
             tokenlayout.addWidget(tokensemclass)
             self.tokens.addLayout(tokenlayout)
@@ -387,21 +598,71 @@ class Window(QtWidgets.QMainWindow):
         for i in range(self.tokens.count() - 1): # last element is stretcher, thus -1
             tokenlayout = self.tokens.itemAt(i) # get current token layout, i must coincide with sentence token indexes
             try:
-                # -2 = semslot, -1 = semclass (might just write 1 and 2 respectively)
-                semslot = tokenlayout.itemAt(tokenlayout.count() - 2).widget().text()
+                # get all fields
+                # -1 = semclass, -2 = semslot, -3 = deps, -4 = deprel, -5 = tokenhead
                 semclass = tokenlayout.itemAt(tokenlayout.count() - 1).widget().text()
-                if semslot not in SEMSLOTS:
-                    tokenlayout.itemAt(tokenlayout.count() - 2).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
-                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 2).widget().setStyleSheet(""))
-                    QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic slot: {semslot}')
-                    return f'!!!{semslot}'
+                semslot = tokenlayout.itemAt(tokenlayout.count() - 2).widget().text()
+                deps = tokenlayout.itemAt(tokenlayout.count() - 3).widget().text()
+                deprel = tokenlayout.itemAt(tokenlayout.count() - 4).widget().text()
+                head = tokenlayout.itemAt(tokenlayout.count() - 5).widget().text()
+                if self.nomorph: # -6 = pos, -7 = lemma
+                    upos = tokenlayout.itemAt(tokenlayout.count() - 6).widget().text()
+                    lemma = tokenlayout.itemAt(tokenlayout.count() - 7).widget().text()
+                else: # -6 = feats, -7 = pos, -8 = lemma
+                    feats = tokenlayout.itemAt(tokenlayout.count() - 6).widget().text()
+                    upos = tokenlayout.itemAt(tokenlayout.count() - 7).widget().text()
+                    lemma = tokenlayout.itemAt(tokenlayout.count() - 8).widget().text()
+
+                # check the fields for correctness
                 if semclass not in SEMCLASS:
                     tokenlayout.itemAt(tokenlayout.count() - 1).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
                     QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 1).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic class: {semclass}')
                     return f'!!!{semclass}'
-                self.data.data[sentkey].tokens[i].semslot = semslot
+                if semslot not in SEMSLOTS:
+                    tokenlayout.itemAt(tokenlayout.count() - 2).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 2).widget().setStyleSheet(""))
+                    QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect semantic slot: {semslot}')
+                    return f'!!!{semslot}'
+                # deprel
+                if deprel not in DEPRELS and deprel != '_':
+                    # we allow to save deprels not existing in our list - just in case
+                    msg = CorrectFieldWarning('Dependency relation:', deprel)
+                    if not msg.exec():
+                        tokenlayout.itemAt(tokenlayout.count() - 4).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                        QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 4).widget().setStyleSheet(""))
+                        return f"!!!{deprel}"
+                # head checks
+                if not head.isdigit() and head != '_':
+                    tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
+                    QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect head: {head}')
+                    return f'!!!{head}'
+                if head != '_' and int(head) > int(self.data.data[sentkey].tokens[-1].idx):
+                    tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
+                    QtWidgets.QMessageBox.about(self, 'Error', f'Head out of sentence boundaries: {head}')
+                    return f'!!!{head}'
+                # check feats
+                if not self.nomorph:
+                    featlist = re.findall(r"(?i)([a-z\[\]]+)=", feats)
+                    if set(featlist) - FEATS:
+                        # we allow to save feats not existing in our list - just in case
+                        msg = CorrectFieldWarning('Grammatical info:', feats)
+                        if not msg.exec():
+                            tokenlayout.itemAt(tokenlayout.count() - 6).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                            QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 6).widget().setStyleSheet(""))
+                            return f"!!!{feats}"
+                # save to conllu instance
                 self.data.data[sentkey].tokens[i].semclass = semclass
+                self.data.data[sentkey].tokens[i].semslot = semslot
+                self.data.data[sentkey].tokens[i].deps = deps
+                self.data.data[sentkey].tokens[i].deprel = deprel 
+                self.data.data[sentkey].tokens[i].head = head
+                if not self.nomorph:
+                    self.data.data[sentkey].tokens[i].feats = feats 
+                self.data.data[sentkey].tokens[i].upos = upos 
+                self.data.data[sentkey].tokens[i].lemma = lemma
             except IndexError: # for testing purposes, normally shouldn't occur
                 print('Self tokens count', self.tokens.count(), 'total tokens', len(self.data.data[sentkey].tokens), i)
                 print(self.data.data[sentkey].text)
@@ -431,6 +692,10 @@ class Window(QtWidgets.QMainWindow):
             self.filepath = filepath 
             self.data = Conllu()
             self.sentnumber = 1
+            filename = os.path.splitext(os.path.basename(filepath))[0]
+            self.setWindowTitle(f"CoBaLD Editor - {filename}")
+            QtWidgets.QMessageBox.about(self, 'New project', 'Now we must import a .conllu')
+            self.importConll()
 
     def openFile(self):
         """Open file function: gets filename"""
@@ -460,6 +725,7 @@ class Window(QtWidgets.QMainWindow):
         self.statusBar.showMessage('Project loaded', 3000)
 
     def importConll(self):
+        """Import conllu file - gets called automatically on new project"""
         if not self.filepath:
             QtWidgets.QMessageBox.about(self, 'Error', 'Create project first!')
             return
@@ -469,6 +735,7 @@ class Window(QtWidgets.QMainWindow):
         if not filepath:
             return
         if filepath and filepath.endswith('conllu'):
+            self.data = Conllu()
             attempt = self.data.read(filepath)
             if attempt == 'BAD':
                 QtWidgets.QMessageBox.about(self, 'Error', 'Something is wrong with the tokens!')
@@ -477,6 +744,10 @@ class Window(QtWidgets.QMainWindow):
             else:
                 self.statusBar.showMessage('CONLL-U loaded', 3000)
                 self.loadsenttogui(self.data.current)
+                if self.data.ready:
+                    self.gotonumber.setMinimum(1)
+                    self.gotonumber.setMaximum(len(self.data))
+                    self.datalength.setText(f"  of {len(self.data)}  ")
         else:
             QtWidgets.QMessageBox.about(self, 'Error', 'File cannot be opened!')
 
@@ -502,6 +773,7 @@ class Window(QtWidgets.QMainWindow):
             self.statusBar.showMessage('Project saved', 3000)
 
     def exportConll(self):
+        """Export conllu, obviously"""
         if not self.data.ready:
             QtWidgets.QMessageBox.about(self, 'Warning', 'No data to export!')
             return
@@ -520,6 +792,7 @@ class Window(QtWidgets.QMainWindow):
         self.tokens.update()
         self.filepath = None 
         self.checkedsent.setChecked(False)
+        self.setWindowTitle("CoBaLD Editor")
 
     def loadsavedsettings(self):
         """Load from saved settings"""
@@ -538,6 +811,7 @@ class Window(QtWidgets.QMainWindow):
                 self.destlang.setCurrentText(settings['destlang'])
 
     def storeFieldText(self):
+        """For undo/redo purposes"""
         command = StoreCommand(self.sender(), self.sender().text())
         self.undoStack.push(command)
 

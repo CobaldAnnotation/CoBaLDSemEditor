@@ -16,21 +16,32 @@ class FailedToken(Exception):
         self.num = num
     def __str__(self):
         return f'Token length is {self.num} instead of 12'
-
+    
 class Token:
     """Storage for token"""
     def __init__(self, line):
         tok = line.strip().split('\t')
         if len(tok) != 12:
             raise FailedToken(len(tok))
-        # used to write conllu
-        self.noshowmorph = '\t'.join(tok[:10])
-        # for showing without feats
-        self.nomorphosyntax = f"{tok[0]:>3}. {tok[1]:<25}{tok[2]:<25}{tok[3]:<6}{tok[6]:<4}{tok[7]:<15}{tok[8]:<10}"
-        # for showing with feats
-        self.morphosyntax = f"{tok[0]:>3}. {tok[1]:<25}{tok[2]:<25}{tok[3]:<6}{tok[5]:<80}{tok[6]:<4}{tok[7]:<15}{tok[8]:<10}"#'    '.join(tok[:10])
-        self.semslot = tok[10]
-        self.semclass = tok[11]
+        self.idx, self.form, self.lemma, self.upos, self.xpos, self.feats, self.head, self.deprel, self.deps, self.misc, self.semslot, self.semclass = tok 
+    
+    def __str__(self):
+        return '\t'.join([self.idx, self.form, self.lemma, self.upos, self.xpos, self.feats, self.head, self.deprel, self.deps, self.misc, self.semslot, self.semclass]) + '\n'
+
+# class Token:
+#     """Storage for token"""
+#     def __init__(self, line):
+#         tok = line.strip().split('\t')
+#         if len(tok) != 12:
+#             raise FailedToken(len(tok))
+#         # used to write conllu
+#         self.noshowmorph = '\t'.join(tok[:10])
+#         # for showing without feats
+#         self.nomorphosyntax = f"{tok[0]:>3}. {tok[1]:<25}{tok[2]:<25}{tok[3]:<6}{tok[6]:<4}{tok[7]:<15}{tok[8]:<10}"
+#         # for showing with feats
+#         self.morphosyntax = f"{tok[0]:>3}. {tok[1]:<25}{tok[2]:<25}{tok[3]:<6}{tok[5]:<80}{tok[6]:<4}{tok[7]:<15}{tok[8]:<10}"#'    '.join(tok[:10])
+#         self.semslot = tok[10]
+#         self.semclass = tok[11]
 
 class Conllu:
     """Main class for handling conllu data"""
@@ -76,7 +87,7 @@ class Conllu:
     
     def write_conllu(self, path):
         with open(path, 'w', encoding='utf8') as file:
-            print('# global.columns =  ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC SEMSLOT SEMCLASS', file=file)
+            print('# global.columns = ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC SEMSLOT SEMCLASS', file=file)
             for key, sent in self.data.items():
                 print(sent.idx, file=file)
                 if sent.text:
@@ -84,7 +95,7 @@ class Conllu:
                 if sent.translation and self.hastranslations:
                     print(f'# text_{self.translang} = {sent.translation}', file=file)
                 for token in sent.tokens:
-                    print('\t'.join([token.noshowmorph, token.semslot, token.semclass]), file=file)
+                    print(token, file=file)
                 print(file=file)
 
     def save(self, path):
