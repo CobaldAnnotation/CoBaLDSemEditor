@@ -2,15 +2,18 @@
 
 #### Description
 
-This is an annotation tool for [CoBaLD Annotation Project](https://github.com/CobaldAnnotation). Currently it allows one to annotate semantic part of the standard only, but future versions may include the ability to annotate morphosyntax as well. 
+This is an annotation tool for [CoBaLD Annotation Project](https://github.com/CobaldAnnotation). It allows to edit annotations in CoBaLD format. 
 
 <img src="https://github.com/fortvivlan/CoBaLDSemEditor/blob/main/img/01.JPG"  width="800">
 
 #### Features
 
+- Editing morphosyntactic information;
+- Adding or removing tokens (normally aimed at ellipsis restoration);
 - Annotation of semantic slots (SS) and semantic classes (SC); 
 - The program doesn't allow to save incorrect SS or SC;
-- Morphosyntactic information can be viewed but not edited;
+- index and wordform information can be viewed but not edited directly;
+- XPOS and misc information is hidden;
 - The program stores comments and 'checked' marks for each sentence in a project;
 - One can share .cobald projects by sending them to whomever;
 - A ready CONLL-U file can be exported at any time;
@@ -26,6 +29,6 @@ PyQT5 is used for the GUI itself and googletrans is used for getting translation
 
 #### Compiled versions
 
-A compiled .exe version can be downloaded [here](https://drive.google.com/file/d/13StDOV0t6MR7R9lAMBCUhrGT9d8yj9Ga/view?usp=drive_link). A MacOS version can be compiled on request.
+A compiled .exe version can be downloaded [here](https://drive.google.com/file/d/1uAoCYlK_Wl1uwAIVLi6zO9udczqpNwWi/view?usp=sharing). A MacOS version can be compiled on request.
 
 
