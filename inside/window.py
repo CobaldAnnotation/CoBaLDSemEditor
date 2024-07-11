@@ -139,7 +139,7 @@ class Window(QtWidgets.QMainWindow):
     def createcolumnheaders(self):
         # create column headers
         self.idxform = QtWidgets.QLabel("  ID\tFORM")
-        self.idxform.setFixedWidth(300)
+        self.idxform.setFixedWidth(310)
         self.lemmaheader = QtWidgets.QLabel("LEMMA")
         self.lemmaheader.setFixedWidth(300)
         self.uposheader = QtWidgets.QLabel("UPOS")
@@ -147,15 +147,13 @@ class Window(QtWidgets.QMainWindow):
         if not self.nomorph:
             self.featsheader = QtWidgets.QLabel("FEATS")
         self.headheader = QtWidgets.QLabel("HEAD")
-        self.headheader.setFixedWidth(50)
+        self.headheader.setFixedWidth(55)
         self.deprelheader = QtWidgets.QLabel("DEPREL")
         self.deprelheader.setFixedWidth(150)
         self.depsheader = QtWidgets.QLabel("DEPS")
         self.depsheader.setFixedWidth(200)
         self.headersemslot = QtWidgets.QLabel('SEMSLOT')
-        self.headersemslot.setFont(self.monospacefont)
         self.headersemclass = QtWidgets.QLabel('SEMCLASS')
-        self.headersemclass.setFont(self.monospacefont)
         self.headercolgrid.addWidget(self.idxform)
         self.headercolgrid.addWidget(self.lemmaheader)
         self.headercolgrid.addWidget(self.uposheader)
@@ -166,6 +164,8 @@ class Window(QtWidgets.QMainWindow):
         self.headercolgrid.addWidget(self.depsheader)
         self.headercolgrid.addWidget(self.headersemslot)
         self.headercolgrid.addWidget(self.headersemclass)
+        for i in reversed(range(self.headercolgrid.count())): 
+                self.headercolgrid.itemAt(i).widget().setFont(self.monospacefont)
 
     def createActions(self):
         """
@@ -592,7 +592,7 @@ class Window(QtWidgets.QMainWindow):
             # tokenfeats.setFixedWidth(800)
             tokenfeats.editingFinished.connect(self.storeFieldText)
             tokenhead = CustomQLineEdit(token.head)
-            tokenhead.setFixedWidth(50)
+            tokenhead.setFixedWidth(55)
             tokenhead.editingFinished.connect(self.storeFieldText)
             tokendeprel = CustomQLineEdit(token.deprel)
             tokendeprel.setFixedWidth(150)
