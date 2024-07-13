@@ -15,11 +15,13 @@ SEMCLASS = pickle.load(open('inside/semclasses.bin', 'rb'))
 DEPRELS = pickle.load(open('inside/deprel.bin', 'rb'))
 FEATS = pickle.load(open('inside/feats.bin', 'rb'))
 POSLIST = pickle.load(open('inside/upos.bin', 'rb'))
+XPOSLIST = pickle.load(open('inside/xpos.bin', 'rb'))
 
 SEMSLOTVARS = QtWidgets.QCompleter(SEMSLOTS)
 SEMCLASSVARS = QtWidgets.QCompleter(SEMCLASS)
 DEPRELCOMPL = QtWidgets.QCompleter(DEPRELS)
 POSCOMPL = QtWidgets.QCompleter(POSLIST)
+XPOSCOMPL = QtWidgets.QCompleter(XPOSLIST)
 
 SEMSLOTS = set(SEMSLOTS)
 SEMCLASS = set(SEMCLASS)
@@ -140,6 +142,8 @@ class Window(QtWidgets.QMainWindow):
         self.lemmaheader.setFixedWidth(300)
         self.uposheader = QtWidgets.QLabel("UPOS")
         self.uposheader.setFixedWidth(75)
+        self.xposheader = QtWidgets.QLabel("XPOS")
+        self.xposheader.setFixedWidth(150)
         if not self.nomorph:
             self.featsheader = QtWidgets.QLabel("FEATS")
         self.headheader = QtWidgets.QLabel("HEAD")
@@ -153,6 +157,7 @@ class Window(QtWidgets.QMainWindow):
         self.headercolgrid.addWidget(self.idxform)
         self.headercolgrid.addWidget(self.lemmaheader)
         self.headercolgrid.addWidget(self.uposheader)
+        self.headercolgrid.addWidget(self.xposheader)
         if not self.nomorph:
             self.headercolgrid.addWidget(self.featsheader)
         self.headercolgrid.addWidget(self.headheader)
@@ -584,8 +589,11 @@ class Window(QtWidgets.QMainWindow):
             tokenpos.setFixedWidth(75)
             tokenpos.setCompleter(POSCOMPL)
             tokenpos.editingFinished.connect(self.storeFieldText)
+            tokenxpos = CustomQLineEdit(token.xpos)
+            tokenxpos.setFixedWidth(150)
+            tokenxpos.setCompleter(XPOSCOMPL)
+            tokenpos.editingFinished.connect(self.storeFieldText)
             tokenfeats = CustomQLineEdit(token.feats)
-            # tokenfeats.setFixedWidth(800)
             tokenfeats.editingFinished.connect(self.storeFieldText)
             tokenhead = CustomQLineEdit(token.head)
             tokenhead.setFixedWidth(55)
@@ -609,6 +617,7 @@ class Window(QtWidgets.QMainWindow):
             tokenlayout.addWidget(tokeninfo)
             tokenlayout.addWidget(tokenlemma)
             tokenlayout.addWidget(tokenpos)
+            tokenlayout.addWidget(tokenxpos)
             if not self.nomorph:
                 tokenlayout.addWidget(tokenfeats)
             tokenlayout.addWidget(tokenhead)
@@ -635,13 +644,15 @@ class Window(QtWidgets.QMainWindow):
                 deps = tokenlayout.itemAt(tokenlayout.count() - 3).widget().text()
                 deprel = tokenlayout.itemAt(tokenlayout.count() - 4).widget().text()
                 head = tokenlayout.itemAt(tokenlayout.count() - 5).widget().text()
-                if self.nomorph: # -6 = pos, -7 = lemma
-                    upos = tokenlayout.itemAt(tokenlayout.count() - 6).widget().text()
-                    lemma = tokenlayout.itemAt(tokenlayout.count() - 7).widget().text()
-                else: # -6 = feats, -7 = pos, -8 = lemma
-                    feats = tokenlayout.itemAt(tokenlayout.count() - 6).widget().text()
+                if self.nomorph: # -6 = xpos, -7 = upos, -8 = lemma
+                    xpos = tokenlayout.itemAt(tokenlayout.count() - 6).widget().text()
                     upos = tokenlayout.itemAt(tokenlayout.count() - 7).widget().text()
                     lemma = tokenlayout.itemAt(tokenlayout.count() - 8).widget().text()
+                else: # -6 = feats, -7 = xpos, -8 = upos, -9 = lemma
+                    feats = tokenlayout.itemAt(tokenlayout.count() - 6).widget().text()
+                    xpos = tokenlayout.itemAt(tokenlayout.count() - 7).widget().text()
+                    upos = tokenlayout.itemAt(tokenlayout.count() - 8).widget().text()
+                    lemma = tokenlayout.itemAt(tokenlayout.count() - 9).widget().text()
 
                 # check the fields for correctness
                 if semclass not in SEMCLASS:
