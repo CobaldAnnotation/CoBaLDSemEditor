@@ -381,6 +381,8 @@ class Window(QtWidgets.QMainWindow):
                     # -1 means step direction
                     self.renumerate(i - 1, -1)
                 break
+        else:
+            QtWidgets.QMessageBox.about(self, 'Error', f'No such index: {choice}')
         self.loadsenttogui(self.data.current)
 
     @pyqtSlot(str)
@@ -679,7 +681,7 @@ class Window(QtWidgets.QMainWindow):
                     QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect head: {head}')
                     return f'!!!{head}'
-                if head != '_' and int(head) > int(self.data.data[sentkey].tokens[-1].idx):
+                if head != '_' and int(head) not in {int(t.idx) for t in self.data.data[sentkey].tokens} | {0}:
                     tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
                     QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Head out of sentence boundaries: {head}')
