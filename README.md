@@ -13,7 +13,7 @@ This is an annotation tool for [CoBaLD Annotation Project](https://github.com/Co
 - Annotation of semantic slots (SS) and semantic classes (SC); 
 - The program doesn't allow to save incorrect SS or SC;
 - index and wordform information can be viewed but not edited directly;
-- XPOS and misc information is hidden;
+- misc information is hidden;
 - The program stores comments and 'checked' marks for each sentence in a project;
 - One can share .cobald projects by sending them to whomever;
 - A ready CONLL-U file can be exported at any time;
