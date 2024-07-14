@@ -681,7 +681,7 @@ class Window(QtWidgets.QMainWindow):
                     QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect head: {head}')
                     return f'!!!{head}'
-                if head != '_' and int(head) not in {int(t.idx) for t in self.data.data[sentkey].tokens} | {0}:
+                if head != '_' and float(head) not in {float(t.idx) for t in self.data.data[sentkey].tokens} | {0}:
                     tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
                     QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Head out of sentence boundaries: {head}')
