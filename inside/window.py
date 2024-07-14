@@ -151,7 +151,7 @@ class Window(QtWidgets.QMainWindow):
         self.deprelheader = QtWidgets.QLabel("DEPREL")
         self.deprelheader.setFixedWidth(150)
         self.depsheader = QtWidgets.QLabel("DEPS")
-        self.depsheader.setFixedWidth(200)
+        # self.depsheader.setFixedWidth(200)
         self.headersemslot = QtWidgets.QLabel('SEMSLOT')
         self.headersemclass = QtWidgets.QLabel('SEMCLASS')
         self.headercolgrid.addWidget(self.idxform)
@@ -605,7 +605,7 @@ class Window(QtWidgets.QMainWindow):
             tokendeprel.setCompleter(DEPRELCOMPL)
             tokendeprel.editingFinished.connect(self.storeFieldText)
             tokendeps = CustomQLineEdit(token.deps)
-            tokendeps.setFixedWidth(200)
+            # tokendeps.setFixedWidth(200)
             tokendeps.editingFinished.connect(self.storeFieldText)
             # add semantics
             tokensemslot = CustomQLineEdit(token.semslot)
