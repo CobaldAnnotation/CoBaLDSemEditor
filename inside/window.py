@@ -6,7 +6,7 @@ import PyQt5.QtGui as QtGui
 import PyQt5.QtCore as QtCore
 from PyQt5.QtCore import pyqtSlot
 from inside.reader import Conllu, Token
-from inside.utils import RestoreWarning, StoreCommand, CustomQLineEdit, CorrectFieldWarning, AddRemoveTokenWindow, DeleteWarning
+from inside.utils import RestoreWarning, StoreCommand, CustomQLineEdit, CorrectFieldWarning, AddRemoveTokenWindow, DeleteWarning, SetFieldWidth, SearchWindow, SearchStopDialogue
 from googletrans import Translator
 
 # Things for checking and auto-completion of fields
@@ -40,6 +40,7 @@ class Window(QtWidgets.QMainWindow):
         self.data = Conllu() # must create an empty conllu instance, will be replaced later
         self.filepath = None # path to open project
         self.sentnumber = 1 # a number for go to button
+        self.textwidth = 300
         self.translator = Translator()
 
         self.initUI()
@@ -135,11 +136,13 @@ class Window(QtWidgets.QMainWindow):
         self.grid.addWidget(self.commentArea)
 
     def createcolumnheaders(self):
+        for i in reversed(range(self.headercolgrid.count())): 
+            self.headercolgrid.itemAt(i).widget().setParent(None)
         # create column headers
         self.idxform = QtWidgets.QLabel("  ID\tFORM")
-        self.idxform.setFixedWidth(310)
+        self.idxform.setFixedWidth(self.textwidth)
         self.lemmaheader = QtWidgets.QLabel("LEMMA")
-        self.lemmaheader.setFixedWidth(300)
+        self.lemmaheader.setFixedWidth(self.textwidth)
         self.uposheader = QtWidgets.QLabel("UPOS")
         self.uposheader.setFixedWidth(75)
         self.xposheader = QtWidgets.QLabel("XPOS")
@@ -261,6 +264,17 @@ class Window(QtWidgets.QMainWindow):
         self.removetoken.setText('&Remove token...')
         self.removetoken.triggered.connect(self.deltoken)
 
+        self.setfieldsize = QtWidgets.QAction('&Set ID and form field width...')
+        self.setfieldsize.setIcon(QtGui.QIcon('inside/design/widen.png'))
+        self.setfieldsize.setText('&Set ID and form field width...')
+        self.setfieldsize.triggered.connect(self.fieldwidthsetter)
+
+        self.searchAction = QtWidgets.QAction('&Search text')
+        self.searchAction.setIcon(QtGui.QIcon('inside/design/search.png'))
+        self.searchAction.setText('&Search text')
+        self.searchAction.setShortcut(QtGui.QKeySequence.Find)
+        self.searchAction.triggered.connect(self.searchtextinitiate)
+
     def createMenuBar(self):
         """Menu Bar for File"""
         menuBar = self.menuBar()
@@ -275,6 +289,8 @@ class Window(QtWidgets.QMainWindow):
         editMenu = menuBar.addMenu('&Edit')
         editMenu.addAction(self.undoAction)
         editMenu.addAction(self.redoAction)
+        editMenu.addAction(self.setfieldsize)
+        editMenu.addAction(self.searchAction)
 
     def createToolBars(self):
         """Toolbar for navigation"""
@@ -319,6 +335,7 @@ class Window(QtWidgets.QMainWindow):
         MoveToolBar.addAction(self.numberloadAction)
         MoveToolBar.addWidget(self.gotonumber)
         MoveToolBar.addWidget(self.datalength)
+        MoveToolBar.addAction(self.searchAction)
 
         ViewToolBar = self.addToolBar("View")
         ViewToolBar.addWidget(self.morphcheck)
@@ -338,7 +355,29 @@ class Window(QtWidgets.QMainWindow):
         except Exception:
             QtWidgets.QMessageBox.about(self, 'Error', "Google Translate doesn't respond")
             return
-    
+        
+    def searchtextinitiate(self):
+        self.searchwin = SearchWindow()
+        self.searchwin.show()
+        self.searchwin.choice.connect(self.searching)
+
+    @pyqtSlot(str)
+    def searching(self, choice):
+        if not self.data.ready:
+            return
+        for key in range(self.data.current + 1, len(self.data)):
+            if choice.lower() in self.data.data[key].text.lower():
+                self.data.current = key 
+                self.loadsenttogui(self.data.current)
+                break 
+        else:
+            searchquest = SearchStopDialogue()
+            if searchquest.exec():
+                self.data.current = 1
+                self.searching(choice)
+            else:
+                self.searchwin.close()
+
     def addtokenat(self):
         """Get index to add a token at it"""
         self.tokenindexwindow = AddRemoveTokenWindow()
@@ -383,6 +422,20 @@ class Window(QtWidgets.QMainWindow):
                 break
         else:
             QtWidgets.QMessageBox.about(self, 'Error', f'No such index: {choice}')
+        self.loadsenttogui(self.data.current)
+
+    def fieldwidthsetter(self):
+        self.fieldwidthwindow = SetFieldWidth(self.textwidth)
+        self.fieldwidthwindow.show()
+        self.fieldwidthwindow.choice.connect(self.fieldwidthchanger)
+
+    @pyqtSlot(str)
+    def fieldwidthchanger(self, choice):
+        if not choice.isdigit():
+            QtWidgets.QMessageBox.about(self, 'Error', f'Can\'t set width: {choice}')
+            return
+        self.textwidth = int(choice)
+        self.createcolumnheaders()
         self.loadsenttogui(self.data.current)
 
     @pyqtSlot(str)
@@ -526,7 +579,6 @@ class Window(QtWidgets.QMainWindow):
     @pyqtSlot()
     def gotoOnEnter(self):
         """Works on enter, sends us to the sentence with the number in the qspinbox"""
-        print(self.gotonumber.value())
         self.gotosent()
 
     def gotosent(self):
@@ -554,8 +606,6 @@ class Window(QtWidgets.QMainWindow):
             # self.headercols.setText(WITHFEATS)
         else:
             self.nomorph = True
-            for i in reversed(range(self.headercolgrid.count())): 
-                self.headercolgrid.itemAt(i).widget().setParent(None)
             self.createcolumnheaders()
             # self.headercols.setText(NOFEATS)
         if not self.data.ready: # otherwise we crash
@@ -583,9 +633,9 @@ class Window(QtWidgets.QMainWindow):
             tokeninfo.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
             tokeninfo.addAction(self.addtoken)
             tokeninfo.addAction(self.removetoken)
-            tokeninfo.setFixedWidth(300)
+            tokeninfo.setFixedWidth(self.textwidth)
             tokenlemma = CustomQLineEdit(token.lemma)
-            tokenlemma.setFixedWidth(300)
+            tokenlemma.setFixedWidth(self.textwidth)
             tokenlemma.editingFinished.connect(self.storeFieldText)
             tokenpos = CustomQLineEdit(token.upos)
             tokenpos.setFixedWidth(75)
@@ -597,6 +647,7 @@ class Window(QtWidgets.QMainWindow):
             tokenpos.editingFinished.connect(self.storeFieldText)
             tokenfeats = CustomQLineEdit(token.feats)
             tokenfeats.editingFinished.connect(self.storeFieldText)
+            tokenfeats.setCursorPosition(0)
             tokenhead = CustomQLineEdit(token.head)
             tokenhead.setFixedWidth(55)
             tokenhead.editingFinished.connect(self.storeFieldText)
@@ -852,6 +903,8 @@ class Window(QtWidgets.QMainWindow):
             if settings.get('srclang') and settings.get('destlang'):
                 self.srclang.setCurrentText(settings['srclang'])
                 self.destlang.setCurrentText(settings['destlang'])
+            if settings.get('textwidth'):
+                self.textwidth = settings['textwidth']
 
     def storeFieldText(self):
         """For undo/redo purposes"""
@@ -863,6 +916,6 @@ class Window(QtWidgets.QMainWindow):
         self.data.save(self.filepath)
         self.settings.setValue("size", self.size())
         self.settings.setValue("pos", self.pos())
-        settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 'nomorph': self.nomorph, 'srclang': self.srclang.currentText(), 'destlang': self.destlang.currentText()}
+        settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 'nomorph': self.nomorph, 'srclang': self.srclang.currentText(), 'destlang': self.destlang.currentText(), 'textwidth': self.textwidth}
         pickle.dump(settings, open('inside/settings.bin', 'wb'))
         e.accept()
