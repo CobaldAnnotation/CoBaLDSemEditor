@@ -46,6 +46,7 @@ class Window(QtWidgets.QMainWindow):
         self.initUI()
         self.onload = True # some костыль
         self.loadsavedsettings()
+        self.changefontsize()
 
     def initUI(self):
         # global settings
@@ -60,15 +61,15 @@ class Window(QtWidgets.QMainWindow):
         if fontId < 0:
             print('font not loaded')
         families = QtGui.QFontDatabase.applicationFontFamilies(fontId)
-        self.fontsize = 9
-        self.monospacefont = QtGui.QFont(families[0], self.fontsize)
+        self.fontsize = 12
+        self.monospacefont = QtGui.QFont(families[0], 9)
         fontId = QtGui.QFontDatabase.addApplicationFont("inside/design/A_STB.ttf")
         if fontId < 0:
             print('font not loaded')
             self.sentencefont = None 
         else:
             families = QtGui.QFontDatabase.applicationFontFamilies(fontId)
-            self.sentencefont = QtGui.QFont(families[0], 12)
+            self.sentencefont = QtGui.QFont(families[0], self.fontsize)
 
         # create Menu and Toolbar
         self.undoStack = QtWidgets.QUndoStack()
@@ -275,6 +276,20 @@ class Window(QtWidgets.QMainWindow):
         self.searchAction.setShortcut(QtGui.QKeySequence.Find)
         self.searchAction.triggered.connect(self.searchtextinitiate)
 
+        self.biggerfontAction = QtWidgets.QAction('&Set font size ++')
+        self.biggerfontAction.setText('&Set font size ++')
+        self.biggerfontAction.setShortcut(QtGui.QKeySequence.ZoomIn)
+        self.biggerfontAction.triggered.connect(self.fontsizeplus)
+
+        self.smallerfontAction = QtWidgets.QAction('&Set font size --')
+        self.smallerfontAction.setText('&Set font size --')
+        self.smallerfontAction.setShortcut(QtGui.QKeySequence.ZoomOut)
+        self.smallerfontAction.triggered.connect(self.fontsizeminus)
+
+        self.resetfontAction = QtWidgets.QAction('&Reset font size')
+        self.resetfontAction.setText('&Reset font size')
+        self.resetfontAction.triggered.connect(self.resetfont)
+
     def createMenuBar(self):
         """Menu Bar for File"""
         menuBar = self.menuBar()
@@ -290,7 +305,11 @@ class Window(QtWidgets.QMainWindow):
         editMenu.addAction(self.undoAction)
         editMenu.addAction(self.redoAction)
         editMenu.addAction(self.setfieldsize)
-        editMenu.addAction(self.searchAction)
+        viewMenu = menuBar.addMenu('&View')
+        viewMenu.addAction(self.searchAction)
+        viewMenu.addAction(self.biggerfontAction)
+        viewMenu.addAction(self.smallerfontAction)
+        viewMenu.addAction(self.resetfontAction)
 
     def createToolBars(self):
         """Toolbar for navigation"""
@@ -355,6 +374,30 @@ class Window(QtWidgets.QMainWindow):
         except Exception:
             QtWidgets.QMessageBox.about(self, 'Error', "Google Translate doesn't respond")
             return
+        
+    def fontsizeplus(self):
+        self.fontsize += 1
+        self.changefontsize()
+
+    def fontsizeminus(self):
+        if self.fontsize > 1:
+            self.fontsize -= 1
+            self.changefontsize()
+
+    def resetfont(self):
+        self.fontsize = 9
+        self.changefontsize()
+        
+    def changefontsize(self):
+        font = self.font()
+        font.setPointSize(self.fontsize)
+        self.window().setFont(font)
+        font = self.textwid.font()
+        font.setPointSize(self.fontsize)
+        self.textwid.setFont(font)
+        font = self.translwid.font()
+        font.setPointSize(self.fontsize)
+        self.translwid.setFont(font)
         
     def searchtextinitiate(self):
         self.searchwin = SearchWindow()
@@ -905,6 +948,8 @@ class Window(QtWidgets.QMainWindow):
                 self.destlang.setCurrentText(settings['destlang'])
             if settings.get('textwidth'):
                 self.textwidth = settings['textwidth']
+            if settings.get('fontsize'):
+                self.fontsize = settings['fontsize']
 
     def storeFieldText(self):
         """For undo/redo purposes"""
@@ -916,6 +961,8 @@ class Window(QtWidgets.QMainWindow):
         self.data.save(self.filepath)
         self.settings.setValue("size", self.size())
         self.settings.setValue("pos", self.pos())
-        settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 'nomorph': self.nomorph, 'srclang': self.srclang.currentText(), 'destlang': self.destlang.currentText(), 'textwidth': self.textwidth}
+        settings = {'lastfile': self.filepath, 'lastcurrent': self.data.current, 
+                    'nomorph': self.nomorph, 'srclang': self.srclang.currentText(), 
+                    'destlang': self.destlang.currentText(), 'textwidth': self.textwidth, 'fontsize': self.fontsize}
         pickle.dump(settings, open('inside/settings.bin', 'wb'))
         e.accept()
