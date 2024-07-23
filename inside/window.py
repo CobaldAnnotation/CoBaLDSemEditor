@@ -799,6 +799,7 @@ class Window(QtWidgets.QMainWindow):
                 if not self.nomorph:
                     self.data.data[sentkey].tokens[i].feats = feats 
                 self.data.data[sentkey].tokens[i].upos = upos 
+                self.data.data[sentkey].tokens[i].xpos = xpos 
                 self.data.data[sentkey].tokens[i].lemma = lemma
             except IndexError: # for testing purposes, normally shouldn't occur
                 print('Self tokens count', self.tokens.count(), 'total tokens', len(self.data.data[sentkey].tokens), i)
