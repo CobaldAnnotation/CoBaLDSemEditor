@@ -324,8 +324,6 @@ class Window(QtWidgets.QMainWindow):
             self.gotonumber.setMinimum(1)
             self.gotonumber.setMaximum(len(self.data))
         self.gotonumber.setFixedWidth(60)
-        self.gotonumber.valueChanged.connect(self.gotosentgetnumber)
-        self.gotonumber.editingFinished.connect(self.gotoOnEnter)
         self.datalength = QtWidgets.QLabel() # number of sents in file
         self.morphcheck = QtWidgets.QCheckBox('Show morphological features')
         self.morphcheck.stateChanged.connect(self.morphload)
@@ -615,15 +613,6 @@ class Window(QtWidgets.QMainWindow):
                 break
         self.loadsenttogui(self.data.current)
 
-    def gotosentgetnumber(self, sentkey):
-        """Just to get sentnumber from qspinbox"""
-        self.sentnumber = sentkey
-
-    @pyqtSlot()
-    def gotoOnEnter(self):
-        """Works on enter, sends us to the sentence with the number in the qspinbox"""
-        self.gotosent()
-
     def gotosent(self):
         """Jump to sentence by number"""
         if not self.data.ready:
@@ -632,7 +621,7 @@ class Window(QtWidgets.QMainWindow):
             attempt = self.savesent(self.data.current)
             if attempt:
                 return
-            self.data.current = self.sentnumber
+            self.data.current = self.gotonumber.value()
             self.loadsenttogui(self.data.current)
 
     def morphload(self, checked):
@@ -820,7 +809,7 @@ class Window(QtWidgets.QMainWindow):
                             if widget is not None:
                                 widget.setParent(None)
                     layout.removeItem(item)
-                    del item # may be redundant
+                    # del item # may be redundant
         
     def newProject(self):
         """Create new empty project"""
