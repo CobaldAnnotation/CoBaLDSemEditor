@@ -765,10 +765,10 @@ class Window(QtWidgets.QMainWindow):
                     QtWidgets.QMessageBox.about(self, 'Error', f'Incorrect head: {head}')
                     return f'!!!{head}'
                 if head != '_' and float(head) not in {float(t.idx) for t in self.data.data[sentkey].tokens if '-' not in t.idx} | {0}:
-                    tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
-                    QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
+                    # tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet("background-color: rgb(245, 66, 87)")
+                    # QtCore.QTimer.singleShot(2000, lambda: tokenlayout.itemAt(tokenlayout.count() - 5).widget().setStyleSheet(""))
                     QtWidgets.QMessageBox.about(self, 'Error', f'Head out of sentence boundaries: {head}')
-                    return f'!!!{head}'
+                    # return f'!!!{head}'
                 # check feats
                 if not self.nomorph:
                     featlist = re.findall(r"(?i)([a-z\[\]]+)=", feats)

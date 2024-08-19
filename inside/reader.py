@@ -80,7 +80,7 @@ class Conllu:
                 if sent.translation and self.hastranslations:
                     print(f'# text_{self.translang} = {sent.translation}', file=file)
                 for token in sent.tokens:
-                    print(token, file=file)
+                    file.write(token)
                 print(file=file)
 
     def save(self, path):
