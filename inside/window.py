@@ -27,7 +27,7 @@ SEMSLOTS = set(SEMSLOTS)
 SEMCLASS = set(SEMCLASS)
 
 # Can add new languages for translation support
-LANGS = {'Hungarian': 'hu', 'Serbian': 'sr', 'Russian': 'ru', 'English': 'en', 'Turkish': 'tr', 'Czech': 'cs', 'Bulgarian': 'bg'}
+LANGS = {'Hungarian': 'hu', 'Serbian': 'sr', 'Russian': 'ru', 'English': 'en', 'Turkish': 'tr', 'Czech': 'cs', 'Bulgarian': 'bg', 'Japanese': 'ja', 'Swedish': 'sv', 'German': 'de', 'Spanish': 'es', 'French': 'fr', 'Romanian': 'ro'}
 
 class Window(QtWidgets.QMainWindow):
     """
